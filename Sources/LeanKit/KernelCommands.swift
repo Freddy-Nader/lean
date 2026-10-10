@@ -46,6 +46,11 @@ enum KernelCommands {
         c.register("find.next", "Find Next", keys: ["cmd+g"], run: win { $0.find.next(backwards: false) })
         c.register("find.previous", "Find Previous", keys: ["cmd+shift+g"], run: win { $0.find.next(backwards: true) })
 
+        c.register("rules.togglePause", "Pause Blocking on This Site", run: win { w in
+            Rules.shared.togglePause(w.tab.url?.host())
+            w.tab.webView.reload()
+        })
+
         c.register("devtools.toggle", "Developer Tools", keys: ["cmd+alt+i"], run: web(Inspector.toggle))
     }
 }

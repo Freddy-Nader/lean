@@ -25,6 +25,7 @@ public final class App: NSObject, NSApplicationDelegate {
         Commands.shared.start()
         newWindow(url: CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") && !$0.hasPrefix("/") }))
         NSApp.activate()
+        Rules.shared.loadBundled()
         Bench.launched()
         Dev.listen(self)
     }

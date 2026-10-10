@@ -6,6 +6,7 @@ import AppKit
 @MainActor
 enum Dev {
     nonisolated static let name = Notification.Name("app.lean.browser.run")
+    static var lastEval = ""
     static var stateFile: URL { Commands.configDir.appending(path: "dev-state.json") }
 
     /// Returns true if this process was a `--run` client and should exit.
@@ -23,7 +24,12 @@ enum Dev {
             let parts = (n.object as? String)?.components(separatedBy: "\u{1f}") ?? []
             MainActor.assumeIsolated {
                 guard let id = parts.first else { return }
-                if id == "load", parts.count > 1 { app.current?.load(parts[1]) } else { Commands.shared.run(id) }
+                if id == "load", parts.count > 1 { app.current?.load(parts[1]) }
+                else if id == "eval", parts.count > 1, let w = app.current {
+                    w.tab.webView.evaluateJavaScript(parts[1]) { r, e in
+                        MainActor.assumeIsolated { lastEval = "\(r ?? e?.localizedDescription ?? "nil")"; dump(app) }
+                    }
+                } else { Commands.shared.run(id) }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { MainActor.assumeIsolated { dump(app) } }
             }
         }
@@ -40,7 +46,8 @@ enum Dev {
         }
         let keys = Dictionary(uniqueKeysWithValues: Commands.shared.all.keys.map { ($0, Commands.shared.key(for: $0) ?? "") })
         let downloads = Downloads.shared.items.map { ["file": $0.file?.path ?? "", "done": $0.done, "failed": $0.failed] as [String: Any] }
-        let state: [String: Any] = ["windows": windows, "commands": keys, "downloads": downloads]
+        let state: [String: Any] = ["windows": windows, "commands": keys, "downloads": downloads,
+                                    "rules": Rules.shared.active, "eval": lastEval, "ruleErrors": Rules.shared.errors]
         if let d = try? JSONSerialization.data(withJSONObject: state, options: [.prettyPrinted, .sortedKeys]) {
             try? d.write(to: stateFile)
         }

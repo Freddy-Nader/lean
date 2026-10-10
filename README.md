@@ -44,3 +44,14 @@ cat ~/.config/lean/dev-state.json                          # windows, tabs, comm
 ```json
 { "downloads.folder": "~/Downloads", "search.template": "https://www.google.com/search?q=%s" }
 ```
+
+## Ad blocking
+
+`scripts/rules.py` downloads EasyList + EasyPrivacy and converts them to WebKit content-blocker JSON
+in `Resources/rules/` (gitignored; `build.sh` runs it when the folder is missing). Delete the folder and
+rebuild to refresh the lists. First launch compiles them in ~5 s in the background; later launches use
+WebKit's cache. Pause on a site with the `rules.togglePause` command.
+
+```sh
+python3 -I tests/test_rules.py   # converter tests
+```

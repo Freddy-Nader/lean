@@ -4,13 +4,21 @@ import WebKit
 /// One tab = one WKWebView. The web view is created lazily so restored tabs cost nothing until shown.
 @MainActor
 final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
-    static let configuration: WKWebViewConfiguration = {
+    /// Shared settings; each tab gets a copy with its own user content controller.
+    static let base: WKWebViewConfiguration = {
         let c = WKWebViewConfiguration()
         c.websiteDataStore = .default()
         c.preferences.isElementFullscreenEnabled = true
         c.mediaTypesRequiringUserActionForPlayback = []
         return c
     }()
+
+    static func makeConfiguration() -> WKWebViewConfiguration {
+        let c = base.copy() as! WKWebViewConfiguration
+        c.userContentController = WKUserContentController()
+        Rules.shared.attach(c.userContentController)
+        return c
+    }
 
     let id = UUID()
     private(set) var pendingURL: URL?
@@ -22,7 +30,7 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
     private var observations: [NSKeyValueObservation] = []
 
     private(set) lazy var webView: WKWebView = {
-        let v = WKWebView(frame: .zero, configuration: Self.configuration)
+        let v = WKWebView(frame: .zero, configuration: Self.makeConfiguration())
         v.isInspectable = true
         v.allowsBackForwardNavigationGestures = true
         v.allowsMagnification = true
@@ -83,6 +91,9 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
     func webView(_ v: WKWebView, decidePolicyFor a: WKNavigationAction,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
         if a.shouldPerformDownload { return decisionHandler(.download) }
+        if a.targetFrame?.isMainFrame ?? true {
+            Rules.shared.sync(v.configuration.userContentController, topHost: a.request.url?.host())
+        }
         if a.navigationType == .linkActivated, a.modifierFlags.contains(.command), let url = a.request.url {
             onOpen?(url, !a.modifierFlags.contains(.shift))
             return decisionHandler(.cancel)
