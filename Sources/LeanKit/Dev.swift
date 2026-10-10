@@ -7,6 +7,7 @@ import AppKit
 enum Dev {
     nonisolated static let name = Notification.Name("app.lean.browser.run")
     static var lastEval = ""
+    private static var napBlock: NSObjectProtocol?
     static var stateFile: URL { Commands.configDir.appending(path: "dev-state.json") }
 
     /// Returns true if this process was a `--run` client and should exit.
@@ -20,6 +21,8 @@ enum Dev {
 
     static func listen(_ app: App) {
         guard ProcessInfo.processInfo.environment["LEAN_DEV"] == "1" else { return }
+        // App Nap would delay commands sent from a shell while the window is in the background.
+        napBlock = ProcessInfo.processInfo.beginActivity(options: .userInitiated, reason: "dev channel")
         DistributedNotificationCenter.default().addObserver(forName: name, object: nil, queue: .main) { n in
             let parts = (n.object as? String)?.components(separatedBy: "\u{1f}") ?? []
             MainActor.assumeIsolated {
@@ -27,6 +30,7 @@ enum Dev {
                 if id == "load", parts.count > 1 { app.current?.load(parts[1]) }
                 else if id == "key", parts.count > 1 { press(parts[1]) }
                 else if id == "type", parts.count > 1 { parts[1].forEach { press(String($0)) } }
+                else if id == "click", parts.count > 2, let x = Double(parts[1]), let y = Double(parts[2]) { click(x, y) }
                 else if id == "snapshot", parts.count > 1 { snapshot(app, parts[1]) }
                 else if id == "eval", parts.count > 1, let t = app.current?.tab {
                     t.webView.evaluateJavaScript(parts[1]) { r, e in
@@ -44,6 +48,26 @@ enum Dev {
         guard let v = app.current?.window?.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
         v.cacheDisplay(in: v.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
+
+    /// Clicks at (x, y) from the window content's top-left, through NSApp.sendEvent like a real mouse.
+    static func click(_ x: Double, _ y: Double) {
+        guard let w = App.shared?.current?.window, let v = w.contentView else { return }
+        let p = NSPoint(x: x, y: v.bounds.height - y)
+        // Tracking areas don't fire for synthetic events, so hover a tab by hand (reveals its ×).
+        var hit = v.hitTest(v.convert(p, from: nil))
+        while let h = hit, !(h is TabStrip.TabButton) { hit = h.superview }
+        if let t = hit as? TabStrip.TabButton,
+           let e = NSEvent.mouseEvent(with: .mouseMoved, location: p, modifierFlags: [], timestamp: 0, windowNumber: w.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) {
+            t.mouseEntered(with: e)
+        }
+        func event(_ type: NSEvent.EventType) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                               windowNumber: w.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        // Queue the mouse-up first: an NSButton's mouseDown runs a tracking loop that waits for it.
+        if let up = event(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
+        if let down = event(.leftMouseDown) { NSApp.sendEvent(down) }
     }
 
     /// Synthesizes a real key event ("return", "down", "cmd+k", "a") through NSApp.sendEvent, so it

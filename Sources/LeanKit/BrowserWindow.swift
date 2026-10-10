@@ -14,6 +14,10 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
     private var edge = "hidden"
     private var edgeConstraints: [NSLayoutConstraint] = []
     private let address = NSTextField()
+    private let nav = Glass.make(cornerRadius: 14)
+    private var navButtons: [NSButton] = []
+    /// Centre of the traffic lights from the window top: the top row is centred on it.
+    private var rowCentre: CGFloat = 16
     private let content = NSView()
     private(set) var tabs: [Tab] = []
     private(set) var activeIndex = 0
@@ -45,6 +49,33 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         address.delegate = self
         address.cell?.isScrollable = true
         address.cell?.wraps = false
+        let close = window?.standardWindowButton(.closeButton), zoom = window?.standardWindowButton(.zoomButton)
+        if let close, let p = close.superview {
+            let c = root.bounds.height - root.convert(close.frame, from: p).midY
+            if (8...30).contains(c) { rowCentre = c }
+        }
+        var zoomRight: CGFloat = 69
+        if let zoom, let p = zoom.superview, root.convert(zoom.frame, from: p).maxX > 40 { zoomRight = root.convert(zoom.frame, from: p).maxX }
+        navButtons = [("chevron.left", "page.back"), ("chevron.right", "page.forward"), ("arrow.clockwise", "page.reload")].map { icon, cmd in
+            let b = NSButton(image: NSImage(systemSymbolName: icon, accessibilityDescription: cmd) ?? NSImage(), target: self, action: #selector(navTapped(_:)))
+            b.isBordered = false
+            b.identifier = .init(cmd)
+            b.widthAnchor.constraint(equalToConstant: 26).isActive = true
+            return b
+        }
+        let navStack = NSStackView(views: navButtons)
+        navStack.spacing = 0
+        navStack.translatesAutoresizingMaskIntoConstraints = false
+        nav.content.addSubview(navStack)
+        nav.view.isHidden = true
+        nav.view.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(nav.view)
+        NSLayoutConstraint.activate([
+            nav.view.topAnchor.constraint(equalTo: root.topAnchor, constant: rowCentre - 14), nav.view.heightAnchor.constraint(equalToConstant: 28),
+            nav.view.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: zoomRight + 12),
+            navStack.leadingAnchor.constraint(equalTo: nav.content.leadingAnchor, constant: 6), navStack.trailingAnchor.constraint(equalTo: nav.content.trailingAnchor, constant: -6),
+            navStack.centerYAnchor.constraint(equalTo: nav.content.centerYAnchor),
+        ])
         find.field.controlSize = .small
         find.onVisibility = { [weak self] shown in self?.findHeight.constant = shown ? 30 : 0 }
         for v in [content, address, find.field] {
@@ -53,7 +84,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         }
         findHeight = find.field.heightAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([findHeight,
-            address.topAnchor.constraint(equalTo: root.topAnchor, constant: 6),
+            address.topAnchor.constraint(equalTo: root.topAnchor, constant: rowCentre * 2 + 4),   // until the address moves into the tab
             address.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 80),
             address.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             address.heightAnchor.constraint(equalToConstant: 24),
@@ -84,9 +115,9 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
             root.addSubview(v, positioned: .below, relativeTo: address)
             switch edge {
             case "top":
-                c += [v.topAnchor.constraint(equalTo: top, constant: 4), v.heightAnchor.constraint(equalToConstant: 30),
-                      v.leadingAnchor.constraint(equalTo: root.leadingAnchor), v.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-                      content.topAnchor.constraint(equalTo: v.bottomAnchor), content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+                c += [v.centerYAnchor.constraint(equalTo: root.topAnchor, constant: rowCentre), v.heightAnchor.constraint(equalToConstant: 28),
+                      v.leadingAnchor.constraint(equalTo: nav.view.trailingAnchor, constant: 8), v.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
+                      content.topAnchor.constraint(equalTo: top, constant: 6), content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
                       content.leadingAnchor.constraint(equalTo: root.leadingAnchor), content.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
             case "bottom":
                 c += [v.bottomAnchor.constraint(equalTo: root.bottomAnchor), v.heightAnchor.constraint(equalToConstant: 30),
@@ -110,7 +141,15 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         NSLayoutConstraint.activate(c)
     }
 
-    private func changed() { NotificationCenter.default.post(name: Self.tabsChanged, object: self) }
+    private func changed() {
+        nav.view.isHidden = tabs.isEmpty
+        let v = tab.flatMap { $0.hasWebView ? $0.webView : nil }
+        navButtons[0].isEnabled = v?.canGoBack ?? false
+        navButtons[1].isEnabled = v?.canGoForward ?? false
+        NotificationCenter.default.post(name: Self.tabsChanged, object: self)
+    }
+
+    @objc private func navTapped(_ b: NSButton) { if let id = b.identifier?.rawValue { Commands.shared.run(id) } }
 
     // MARK: tabs
 

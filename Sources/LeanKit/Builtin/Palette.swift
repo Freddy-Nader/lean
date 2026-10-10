@@ -34,7 +34,8 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
     private var stack: [Level] = []
     private weak var host: BrowserWindow?
     private let backdrop = Backdrop()
-    private let box = NSVisualEffectView()
+    private let glass = Glass.make(cornerRadius: 16)
+    private var box: NSView { glass.view }
     private let field = NSTextField()
     private let table = NSTableView()
     private let scroll = NSScrollView()
@@ -340,11 +341,6 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
     // MARK: views
 
     private func build() {
-        box.material = .popover
-        box.state = .active
-        box.wantsLayer = true
-        box.layer?.cornerRadius = 12
-        box.layer?.masksToBounds = true
         box.translatesAutoresizingMaskIntoConstraints = false
         backdrop.onClick = { [weak self] in if self?.centered == false { self?.close() } }
         backdrop.addSubview(box)
@@ -377,7 +373,7 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
 
         for v in [field, sep1, scroll, sep2, hintLeft, hintRight] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
-            box.addSubview(v)
+            glass.content.addSubview(v)
         }
         tableHeight = scroll.heightAnchor.constraint(equalToConstant: 200)
         topNormal = box.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 72)
@@ -386,23 +382,23 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
             box.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
             box.widthAnchor.constraint(equalToConstant: 640),
             box.widthAnchor.constraint(lessThanOrEqualTo: backdrop.widthAnchor, constant: -32),
-            field.topAnchor.constraint(equalTo: box.topAnchor, constant: 12),
-            field.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 16),
-            field.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -16),
+            field.topAnchor.constraint(equalTo: glass.content.topAnchor, constant: 12),
+            field.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor, constant: 16),
+            field.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor, constant: -16),
             sep1.topAnchor.constraint(equalTo: field.bottomAnchor, constant: 10),
-            sep1.leadingAnchor.constraint(equalTo: box.leadingAnchor),
-            sep1.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            sep1.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor),
+            sep1.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor),
             scroll.topAnchor.constraint(equalTo: sep1.bottomAnchor, constant: 4),
-            scroll.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 6),
-            scroll.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -6),
+            scroll.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor, constant: 6),
+            scroll.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor, constant: -6),
             tableHeight,
             sep2.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 4),
-            sep2.leadingAnchor.constraint(equalTo: box.leadingAnchor),
-            sep2.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            sep2.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor),
+            sep2.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor),
             hintLeft.topAnchor.constraint(equalTo: sep2.bottomAnchor, constant: 7),
-            hintLeft.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 16),
+            hintLeft.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor, constant: 16),
             hintRight.centerYAnchor.constraint(equalTo: hintLeft.centerYAnchor),
-            hintRight.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -16),
+            hintRight.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor, constant: -16),
             box.bottomAnchor.constraint(equalTo: hintLeft.bottomAnchor, constant: 8),
         ])
     }

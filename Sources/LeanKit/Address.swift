@@ -20,6 +20,15 @@ public enum Address {
         return URL(string: searchTemplate.replacingOccurrences(of: "%s", with: q))
     }
 
+    /// What a tab shows for its URL: the host without `www.`, nothing after the TLD.
+    public static func displayHost(_ url: URL?) -> String {
+        guard let url else { return "" }
+        if url.scheme == "file" { return url.lastPathComponent }
+        let host = url.host() ?? ""
+        if url.scheme == "lean" { return "lean://" + host }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
     static func looksLikeHost(_ s: String) -> Bool {
         if s.contains(" ") { return false }
         if isLocal(s) { return true }

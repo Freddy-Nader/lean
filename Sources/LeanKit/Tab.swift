@@ -23,6 +23,11 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
         return c
     }
 
+    /// Site icons by host, filled after page loads.
+    static var icons: [String: NSImage] = [:]
+    private static var tried: Set<String> = []
+    var favicon: NSImage? { url?.host().flatMap { Self.icons[$0] } }
+
     let id = UUID()
     private(set) var pendingURL: URL?
     var onChange: ((Tab) -> Void)?
@@ -113,6 +118,19 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
 
     func webView(_ v: WKWebView, didFinish n: WKNavigation!) {
         AddonHost.shared.emit("tabLoaded", ["id": id.uuidString, "url": url?.absoluteString ?? "", "title": title])
+        guard let page = v.url, let host = page.host(), page.scheme?.hasPrefix("http") == true, Self.tried.insert(host).inserted else { return }
+        v.evaluateJavaScript(#"document.querySelector('link[rel~="icon"]')?.href ?? ""#) { [weak self] r, _ in
+            MainActor.assumeIsolated {
+                let href = (r as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) } ?? URL(string: "/favicon.ico", relativeTo: page)
+                guard let href else { return }
+                Task { @MainActor in
+                    if let (d, _) = try? await URLSession.shared.data(from: href), let img = NSImage(data: d) {
+                        Self.icons[host] = img
+                        self?.changed()
+                    }
+                }
+            }
+        }
     }
 
     // MARK: downloads
