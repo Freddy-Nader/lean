@@ -35,7 +35,20 @@ enum Prelude {
           onClosed: (fn) => api.hooks.on("tabClosed", fn),
         },
         keys: { bind: (k, c) => native.bind(String(k), c == null ? null : String(c)), unbind: (k) => native.bind(String(k), null) },
-        ui: { toast: (t) => native.toast(String(t)) },
+        ui: {
+          toast: (t) => native.toast(String(t)),
+          copy: (t) => native.copy(String(t)),
+          open: (target, o) => native.openItem(String(target), !!(o && o.reveal)),
+        },
+        rank: {
+          match: (q, text) => native.rankMatch(String(q), String(text)),
+          score: (q, text, key) => native.rankScore(String(q), String(text), String(key)),
+          pick: (key) => native.rankPick(String(key)),
+          forget: (key) => native.rankForget(String(key)),
+        },
+        downloads: { list: () => native.downloads() },
+        app: { get justLaunched() { return native.justLaunched(); } },
+        page: { setData: (d) => native.pageData(json(d)) },
         storage: {
           get: (k) => JSON.parse(native.storageAll())[k],
           set: (k, v) => native.storageSet(String(k), json(v)),
@@ -43,6 +56,7 @@ enum Prelude {
         },
         settings: { get: (k) => native.setting(String(k)) },
         rules: {
+          bundled: () => native.rulesBundled(),
           add: (id, rules) => native.rulesAdd(String(id), typeof rules === "string" ? rules : JSON.stringify(rules)),
           remove: (id) => native.rulesRemove(String(id)),
         },
@@ -55,6 +69,45 @@ enum Prelude {
         slots: { provide: (name, impl) => native.provide(String(name), impl) },
         palette: { addGroup: (name, provider) => native.paletteGroup(String(name), provider) },
       };
+
+      // JavaScriptCore has no web APIs; minimal URL + URLSearchParams for absolute URLs.
+      if (typeof URLSearchParams === "undefined") {
+        globalThis.URLSearchParams = class {
+          constructor(q = "") {
+            this._p = String(q).replace(/^\?/, "").split("&").filter(Boolean).map((kv) => {
+              const [k, v = ""] = kv.split("=");
+              const d = (x) => { try { return decodeURIComponent(x.replace(/\+/g, " ")); } catch { return x; } };
+              return [d(k), d(v)];
+            });
+          }
+          get(k) { const e = this._p.find((p) => p[0] === k); return e ? e[1] : null; }
+          has(k) { return this._p.some((p) => p[0] === k); }
+          set(k, v) { this.delete(k); this._p.push([k, String(v)]); }
+          append(k, v) { this._p.push([k, String(v)]); }
+          delete(k) { this._p = this._p.filter((p) => p[0] !== k); }
+          keys() { return this._p.map((p) => p[0])[Symbol.iterator](); }
+          entries() { return this._p.map((p) => [...p])[Symbol.iterator](); }
+          [Symbol.iterator]() { return this.entries(); }
+          toString() { return this._p.map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&"); }
+        };
+      }
+      if (typeof URL === "undefined") {
+        globalThis.URL = class {
+          constructor(s) {
+            const m = String(s).match(/^([a-z][a-z0-9+.-]*:)(?:\/\/(?:[^@\/?#]*@)?([^:\/?#]*)(?::(\d+))?)?([^?#]*)(\?[^#]*)?(#.*)?$/i);
+            if (!m) throw new TypeError("Invalid URL: " + s);
+            this.protocol = m[1].toLowerCase(); this.hostname = (m[2] || "").toLowerCase(); this.port = m[3] || "";
+            this.pathname = m[4] || "/"; this.hash = m[6] || "";
+            this.searchParams = new URLSearchParams(m[5] || "");
+          }
+          get host() { return this.hostname + (this.port ? ":" + this.port : ""); }
+          get origin() { return this.protocol + "//" + this.host; }
+          get search() { const q = this.searchParams.toString(); return q ? "?" + q : ""; }
+          set search(v) { this.searchParams = new URLSearchParams(v); }
+          get href() { return this.origin + this.pathname + this.search + this.hash; }
+          toString() { return this.href; }
+        };
+      }
 
       globalThis.setTimeout = (fn, ms) => native.setTimeout(() => { try { settle(fn()); } catch (e) { fail(e); } }, ms || 0);
       globalThis.console = {

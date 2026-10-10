@@ -133,6 +133,7 @@ public final class AddonHost: NSObject, WKScriptMessageHandler {
     }
 
     private func refreshScripts() { controllers.allObjects.forEach(install) }
+    func scriptsChanged() { refreshScripts() }
 
     private func install(into c: WKUserContentController) {
         c.removeAllUserScripts()

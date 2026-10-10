@@ -14,6 +14,8 @@ public final class App: NSObject, NSApplicationDelegate {
     }
 
     public private(set) static weak var shared: App?
+    private let started = Date()
+    var uptime: TimeInterval { Date().timeIntervalSince(started) }
     private(set) var windows: [BrowserWindow] = []
 
     var allTabs: [Tab] { windows.flatMap(\.tabs) }
@@ -35,7 +37,7 @@ public final class App: NSObject, NSApplicationDelegate {
         AddonHost.shared.start()
         newWindow(url: CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") && !$0.hasPrefix("/") }))
         NSApp.activate()
-        Rules.shared.loadBundled()
+        AddonHost.shared.emit("ready", [:])
         Bench.launched()
         Dev.listen(self)
     }

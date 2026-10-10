@@ -27,9 +27,10 @@ export default {
     },
   },
 
-  // runs in the host JSContext
-  setup(ctx) {},                 // once, after load
-  onTabLoad(tab) {},
+  // runs in the host JSContext; every hook also gets the context as its second argument
+  setup(ctx) {},                 // once, after load (and after every hot reload)
+  onReady(_, ctx) {},            // once per launch, after the first window opens
+  onTabLoad(tab, ctx) {},
   onTabCreated(tab) {},
   onTabClosed(tab) {},
 

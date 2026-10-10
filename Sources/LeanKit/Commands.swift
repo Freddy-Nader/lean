@@ -100,12 +100,29 @@ public final class Commands {
         rebuildBindings()
     }
 
+    private var stamps: [String: Date] = [:]
+
+    /// The config dir also holds files the app writes often (rank, dev state), so reload only
+    /// what actually changed.
+    private func configDirChanged() {
+        func changed(_ f: URL) -> Bool {
+            let m = (try? f.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            defer { stamps[f.path] = m }
+            return stamps[f.path] != m
+        }
+        if changed(Self.keysFile) { loadUserKeys() }
+        if changed(Settings.file) {
+            Settings.shared.reload()
+            AddonHost.shared.rescan()
+        }
+    }
+
     private func watchUserKeys() {
         try? FileManager.default.createDirectory(at: Self.configDir, withIntermediateDirectories: true)
         let fd = open(Self.configDir.path, O_EVTONLY)
         guard fd >= 0 else { return }
         let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename], queue: .main)
-        src.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.loadUserKeys(); Settings.shared.reload() } }
+        src.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.configDirChanged() } }
         src.setCancelHandler { close(fd) }
         src.resume()
         watcher = src

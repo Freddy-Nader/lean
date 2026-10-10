@@ -19,7 +19,7 @@ public final class Rules {
 
     /// Loads every *.json in the bundle's rules folder. Cached lists apply in milliseconds;
     /// first-time compiles run in WebKit's background process without blocking launch.
-    func loadBundled() {
+    func loadBundled(prefix: String = "") {
         guard let dir = Bundle.main.resourceURL?.appending(path: "rules"),
               let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])
         else { return }
@@ -27,7 +27,7 @@ public final class Rules {
             // Cache key from size + mtime, so a cached list never needs its JSON read at launch.
             let v = try? f.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
             let stamp = "\(v?.fileSize ?? 0)-\(Int(v?.contentModificationDate?.timeIntervalSince1970 ?? 0))"
-            add(f.deletingPathExtension().lastPathComponent, key: stamp, size: v?.fileSize ?? 0) {
+            add(prefix + f.deletingPathExtension().lastPathComponent, key: stamp, size: v?.fileSize ?? 0) {
                 (try? String(contentsOf: f, encoding: .utf8)) ?? "[]"
             }
         }

@@ -11,7 +11,7 @@ Checkpoint state for resuming an interrupted run. One commit per checkpoint.
 | 3b | Downloads + settings.json | done `4fc7f45` |
 | 4 | Rule-list engine + EasyList converter | done `b0323b6` |
 | 5 | JS add-on host: hot reload, isolation, slots, hooks, lean://addons page | done `c924b31` |
-| 6 | Default add-ons (palette, tabstrip, adblock, history, downloads-panel, session, link-copy) + optional darkmode | in progress |
+| 6 | Default add-ons (palette, tabstrip, adblock, history, downloads-panel, session, link-copy) + optional darkmode | done |
 | 6a | Swift add-on protocol, Rank service, palette, tab strip | done |
 | 7 | Import add-on | todo |
 | 8 | `/addon` skill + `lean --check` | todo |

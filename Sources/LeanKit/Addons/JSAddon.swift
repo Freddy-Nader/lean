@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import JavaScriptCore
 import WebKit
 
@@ -19,6 +19,8 @@ public final class JSAddon {
     let modified: Date
     let world: WKContentWorld
     private(set) var pageScript: WKUserScript?
+    private var pageDef: (expr: String, regexes: [String], start: Bool)?
+    private var pageData = "null"
 
     private var context: JSContext?
     private var lean: JSValue?
@@ -106,9 +108,9 @@ public final class JSAddon {
 
     private static let installHooks = """
     (def, api) => {
-      const map = { onTabLoad: "tabLoaded", onTabCreated: "tabCreated", onTabClosed: "tabClosed",
+      const map = { onReady: "ready", onTabLoad: "tabLoaded", onTabCreated: "tabCreated", onTabClosed: "tabClosed",
                     onMessage: "message", beforeNavigate: "beforeNavigate", beforeDownload: "beforeDownload" };
-      for (const k in map) if (typeof def[k] === "function") api.hooks.on(map[k], def[k].bind(def));
+      for (const k in map) if (typeof def[k] === "function") api.hooks.on(map[k], (p) => def[k](p, api));
     }
     """
 
@@ -133,15 +135,27 @@ public final class JSAddon {
               let run = page.forProperty("run"), run.isFunction,
               let expr = lean?.invokeMethod("asExpression", withArguments: [run])?.toString() else { return }
         let patterns = (page.forProperty("match")?.toArray() as? [String]) ?? ["*://*/*"]
-        let regexes = patterns.map(Self.matchRegex)
-        let start = page.forProperty("runAt")?.stringOrNil == "start"
+        pageDef = (expr, patterns.map(Self.matchRegex), page.forProperty("runAt")?.stringOrNil == "start")
+        rebuildPageScript()
+    }
+
+    /// `page.setData(obj)` from the host: baked into the page script as `data` for the next page loads.
+    func setPageData(_ json: String) {
+        pageData = json
+        rebuildPageScript()
+        AddonHost.shared.scriptsChanged()
+    }
+
+    private func rebuildPageScript() {
+        guard let d = pageDef else { return }
         let src = """
         \(Prelude.page)
-        if (\(regexes.map { "/\($0)/.test(location.href)" }.joined(separator: " || "))) {
-          try { (\(expr))(window.__leanPage); } catch (e) { window.__leanPage.emit("__error", String(e && e.stack || e)); }
+        window.__leanPage.data = \(pageData);
+        if (\(d.regexes.map { "/\($0)/.test(location.href)" }.joined(separator: " || "))) {
+          try { (\(d.expr))(window.__leanPage); } catch (e) { window.__leanPage.emit("__error", String(e && e.stack || e)); }
         }
         """
-        pageScript = WKUserScript(source: src, injectionTime: start ? .atDocumentStart : .atDocumentEnd,
+        pageScript = WKUserScript(source: src, injectionTime: d.start ? .atDocumentStart : .atDocumentEnd,
                                   forMainFrameOnly: true, in: world)
     }
 
@@ -226,6 +240,32 @@ public final class JSAddon {
             }
         }
 
+        let copy: @convention(block) (String) -> Void = { t in
+            main { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(t, forType: .string) }
+        }
+        let openItem: @convention(block) (String, Bool) -> Void = { target, reveal in
+            main {
+                let u = target.hasPrefix("/") || target.hasPrefix("~")
+                    ? URL(fileURLWithPath: (target as NSString).expandingTildeInPath) : URL(string: target)
+                guard let u else { return }
+                if reveal { NSWorkspace.shared.activateFileViewerSelecting([u]) } else { NSWorkspace.shared.open(u) }
+            }
+        }
+        let rankMatch: @convention(block) (String, String) -> Any = { q, t in Rank.match(q, t) ?? NSNull() }
+        let rankScore: @convention(block) (String, String, String) -> Any = { q, t, k in main { Rank.shared.score(query: q, text: t, key: k) ?? NSNull() } }
+        let rankPick: @convention(block) (String) -> Void = { k in main { Rank.shared.pick(k) } }
+        let rankForget: @convention(block) (String) -> Void = { k in main { Rank.shared.forget(k) } }
+        let downloads: @convention(block) () -> Any = {
+            main { Downloads.shared.items.reversed().map { ["url": $0.source?.absoluteString ?? "", "path": $0.file?.path ?? "",
+                                                             "done": $0.done, "failed": $0.failed] } }
+        }
+        let justLaunched: @convention(block) () -> Bool = { main { App.shared?.uptime ?? 0 < 5 } }
+        let pageData: @convention(block) (String) -> Void = { [weak self] j in main { self?.setPageData(j) } }
+        let rulesBundled: @convention(block) () -> Void = { main { Rules.shared.loadBundled(prefix: "\(owner).") } }
+
+        set("copy", copy); set("openItem", openItem)
+        set("rankMatch", rankMatch); set("rankScore", rankScore); set("rankPick", rankPick); set("rankForget", rankForget)
+        set("downloads", downloads); set("justLaunched", justLaunched); set("pageData", pageData); set("rulesBundled", rulesBundled)
         set("fail", fail); set("log", log)
         set("activeTab", activeTab); set("listTabs", listTabs); set("openTab", openTab)
         set("tabAction", tabAction); set("evalInTab", evalInTab); set("sendToTab", sendToTab)

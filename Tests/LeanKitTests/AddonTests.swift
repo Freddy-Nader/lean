@@ -55,3 +55,22 @@ import Testing
         #expect(r.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil)
     }
 }
+
+@MainActor
+@Suite struct PolyfillTests {
+    @Test func urlParsesAndStripsParams() throws {
+        let f = FileManager.default.temporaryDirectory.appending(path: "u\(UUID().uuidString.prefix(6)).js")
+        try """
+        export default { commands: { "u.t": { run() {
+          const u = new URL("https://www.Example.com:8080/a/b?utm_source=x&q=hello+world#top");
+          u.searchParams.delete("utm_source");
+          console.log([u.hostname, u.port, u.pathname, u.searchParams.get("q"), u.search, u.href].join("|"));
+        } } } };
+        """.write(to: f, atomically: true, encoding: .utf8)
+        let a = JSAddon(file: f, kind: .user)
+        a.load()
+        Commands.shared.run("u.t")
+        #expect(a.logs.last == "www.example.com|8080|/a/b|hello world|?q=hello%20world|https://www.example.com:8080/a/b?q=hello%20world#top")
+        a.unload()
+    }
+}
