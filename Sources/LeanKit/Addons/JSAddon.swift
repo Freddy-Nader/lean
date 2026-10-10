@@ -108,7 +108,7 @@ public final class JSAddon {
 
     private static let installHooks = """
     (def, api) => {
-      const map = { onReady: "ready", onTabLoad: "tabLoaded", onTabCreated: "tabCreated", onTabClosed: "tabClosed",
+      const map = { onReady: "ready", onImport: "import", onTabLoad: "tabLoaded", onTabCreated: "tabCreated", onTabClosed: "tabClosed",
                     onMessage: "message", beforeNavigate: "beforeNavigate", beforeDownload: "beforeDownload" };
       for (const k in map) if (typeof def[k] === "function") api.hooks.on(map[k], (p) => def[k](p, api));
     }
@@ -252,7 +252,7 @@ public final class JSAddon {
             }
         }
         let rankMatch: @convention(block) (String, String) -> Any = { q, t in Rank.match(q, t) ?? NSNull() }
-        let rankScore: @convention(block) (String, String, String) -> Any = { q, t, k in main { Rank.shared.score(query: q, text: t, key: k) ?? NSNull() } }
+        let rankScore: @convention(block) (String, String, String) -> Any = { q, t, k in main { () -> Any in Rank.shared.score(query: q, text: t, key: k).map { $0 as Any } ?? NSNull() } }
         let rankPick: @convention(block) (String) -> Void = { k in main { Rank.shared.pick(k) } }
         let rankForget: @convention(block) (String) -> Void = { k in main { Rank.shared.forget(k) } }
         let downloads: @convention(block) () -> Any = {

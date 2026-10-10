@@ -19,7 +19,7 @@ public protocol SwiftAddon: AnyObject {
 @MainActor
 public enum SwiftAddons {
     /// Shipped native add-ons, in load order.
-    static let all: [SwiftAddon] = [Palette.shared, TabStrip.shared]
+    static let all: [SwiftAddon] = [Palette.shared, TabStrip.shared, BrowserImport()]
 
     static var loaded = Set<String>()
     static var errors: [String: String] = [:]

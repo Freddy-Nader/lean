@@ -25,7 +25,8 @@ function save(storage) {
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    const all = Object.entries(entries).sort((a, b) => b[1].last - a[1].last).slice(0, MAX);
+    // Bookmarks are never evicted; the rest keeps the most recent MAX.
+    const all = Object.entries(entries).sort((a, b) => (b[1].bookmark - a[1].bookmark) || (b[1].last - a[1].last)).slice(0, MAX);
     entries = Object.fromEntries(all);
     storage.set("entries", entries);
   }, 3000);
@@ -44,7 +45,7 @@ export default {
         .filter(([key]) => !open.has(key))
         .map(([key, e]) => {
           const s = rank.score(q, (e.title || "") + " " + key, "hist:" + key);
-          return s == null ? null : { e, key, s: s * (e.abandoned ? 0.3 : 1) * (1 + Math.log1p(e.visits) / 4) };
+          return s == null ? null : { e, key, s: s * (e.abandoned ? 0.3 : 1) * (e.bookmark ? 1.5 : 1) * (1 + Math.log1p(e.visits) / 4) };
         })
         .filter(Boolean)
         .sort((a, b) => b.s - a.s)
@@ -62,6 +63,21 @@ export default {
       title: "Clear History",
       run({ storage, ui }) { entries = {}; storage.set("entries", {}); ui.toast("History cleared"); },
     },
+  },
+
+  // From the import add-on: { kind: "history" | "bookmarks", items: [{ url, title, visits?, last? }] }.
+  onImport({ kind, items }, { storage }) {
+    for (const it of items) {
+      const key = norm(it.url);
+      if (!key) continue;
+      const e = entries[key] || { url: it.url, visits: 0, last: 0 };
+      e.title = e.title || it.title;
+      e.visits += it.visits || 0;
+      e.last = Math.max(e.last, it.last || 0);
+      if (kind === "bookmarks") e.bookmark = true;
+      entries[key] = e;
+    }
+    save(storage);
   },
 
   onTabLoad(tab, { storage }) {

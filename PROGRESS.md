@@ -13,7 +13,7 @@ Checkpoint state for resuming an interrupted run. One commit per checkpoint.
 | 5 | JS add-on host: hot reload, isolation, slots, hooks, lean://addons page | done `c924b31` |
 | 6 | Default add-ons (palette, tabstrip, adblock, history, downloads-panel, session, link-copy) + optional darkmode | done |
 | 6a | Swift add-on protocol, Rank service, palette, tab strip | done |
-| 7 | Import add-on | todo |
+| 7 | Import add-on (Chromium history/bookmarks/cookies, Safari history/bookmarks) | done |
 | 8 | `/addon` skill + `lean --check` | todo |
 | 9 | Phase 2: Chrome extensions, Web Store, password test | todo (needs manual testing) |
 
