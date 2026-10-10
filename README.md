@@ -31,7 +31,7 @@ Every action is a command. Override keys in `~/.config/lean/keys.json` (reloads 
 ## Drive the app from a shell (development)
 
 ```sh
-open --env LEAN_DEV=1 build/lean.app
+open --env LEAN_DEV=1 --env LEAN_CONFIG_DIR=/tmp/lean-home/config build/lean.app   # LEAN_CONFIG_DIR: throwaway config dir
 build/lean.app/Contents/MacOS/lean --run page.reload       # run any command id
 build/lean.app/Contents/MacOS/lean --run load github.com   # load an address
 cat ~/.config/lean/dev-state.json                          # windows, tabs, commands + keys

@@ -235,8 +235,8 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         let inTab = { if let u = url { if let t = w?.tab { t.load(u) } else { w?.open(u, background: false) } } }
         let inNew = { if let u = url { w?.open(u, background: false) } }
         return Item(icon: isSearch ? "magnifyingglass" : "arrow.up.right", title: isSearch ? "Search the web for “\(q)”" : "Open \(q)",
-                    subtitle: url?.host() ?? "", accessory: fresh ? "⌘↵ this tab" : "⌘↵ new tab", key: "web", primary: isSearch ? "Search" : "Open",
-                    run: fresh ? inNew : inTab, alt: fresh ? inTab : inNew)
+                    subtitle: url?.host() ?? "", accessory: w?.tab == nil ? "" : fresh ? "⌘↵ this tab" : "⌘↵ new tab", key: "web", primary: isSearch ? "Search" : "Open",
+                    run: fresh ? inNew : inTab, alt: w?.tab == nil ? nil : fresh ? inTab : inNew)
     }
 
     // MARK: table

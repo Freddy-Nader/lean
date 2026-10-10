@@ -86,8 +86,10 @@ public final class Commands {
 
     // MARK: ~/.config/lean/keys.json  — {"cmd+k": "palette.open", "cmd+shift+c": null}
 
+    /// `LEAN_CONFIG_DIR` overrides it, so development runs never touch the real config.
     static var configDir: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config/lean", directoryHint: .isDirectory)
+        if let d = ProcessInfo.processInfo.environment["LEAN_CONFIG_DIR"] { return URL(fileURLWithPath: d, isDirectory: true) }
+        return FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config/lean", directoryHint: .isDirectory)
     }
     static var keysFile: URL { configDir.appending(path: "keys.json") }
 

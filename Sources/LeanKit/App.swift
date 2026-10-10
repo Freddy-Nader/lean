@@ -53,8 +53,8 @@ public final class App: NSObject, NSApplicationDelegate {
         windows.append(w)
         w.onClose = { [weak self, weak w] in self?.windows.removeAll { $0 === w } }
         w.showWindow(nil)
+        if let url { w.load(url) }   // before `opened`, so an empty-window palette does not flash
         NotificationCenter.default.post(name: BrowserWindow.opened, object: w)
-        if let url { w.load(url) }
         return w
     }
 
