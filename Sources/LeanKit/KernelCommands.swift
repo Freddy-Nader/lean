@@ -16,6 +16,21 @@ enum KernelCommands {
         c.register("window.new", "New Window", keys: ["cmd+n"]) { app.newWindow() }
         c.register("window.close", "Close Window", keys: ["cmd+shift+w"], run: win { $0.close() })
 
+        c.register("tab.new", "New Tab", keys: ["cmd+t"], run: win { $0.add(Tab(), select: true) })
+        c.register("tab.close", "Close Tab", keys: ["cmd+w"], run: win { $0.close(at: $0.activeIndex) })
+        c.register("tab.reopen", "Reopen Closed Tab", keys: ["cmd+shift+t"], run: win { w in
+            guard let last = Tab.closed.popLast() else { return }
+            w.add(Tab(url: last), select: true)
+        })
+        c.register("tab.next", "Next Tab", keys: ["ctrl+tab", "cmd+shift+]", "cmd+alt+right"], run: win { $0.cycle(1) })
+        c.register("tab.previous", "Previous Tab", keys: ["ctrl+shift+tab", "cmd+shift+[", "cmd+alt+left"], run: win { $0.cycle(-1) })
+        c.register("tab.moveRight", "Move Tab Right", keys: ["ctrl+shift+pagedown"], run: win { $0.move(by: 1) })
+        c.register("tab.moveLeft", "Move Tab Left", keys: ["ctrl+shift+pageup"], run: win { $0.move(by: -1) })
+        for n in 1...8 {
+            c.register("tab.select\(n)", "Go to Tab \(n)", keys: ["cmd+\(n)"], run: win { $0.select(n - 1) })
+        }
+        c.register("tab.selectLast", "Go to Last Tab", keys: ["cmd+9"], run: win { $0.select($0.tabs.count - 1) })
+
         c.register("address.focus", "Focus Address Bar", keys: ["cmd+l"], run: win { $0.focusAddress() })
 
         c.register("page.reload", "Reload Page", keys: ["cmd+r"], run: web { $0.reload() })

@@ -3,7 +3,7 @@ import WebKit
 
 /// One tab = one WKWebView. The web view is created lazily so restored tabs cost nothing until shown.
 @MainActor
-final class Tab: NSObject {
+final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
     static let configuration: WKWebViewConfiguration = {
         let c = WKWebViewConfiguration()
         c.websiteDataStore = .default()
@@ -15,6 +15,10 @@ final class Tab: NSObject {
     let id = UUID()
     private(set) var pendingURL: URL?
     var onChange: ((Tab) -> Void)?
+    /// Asks the window to open a URL in a new tab (target=_blank, ⌘-click, window.open).
+    var onOpen: ((URL, _ background: Bool) -> Void)?
+    /// Recently closed tab URLs for ⌘⇧T, app-wide.
+    static var closed: [URL?] = []
     private var observations: [NSKeyValueObservation] = []
 
     private(set) lazy var webView: WKWebView = {
@@ -23,6 +27,8 @@ final class Tab: NSObject {
         v.allowsBackForwardNavigationGestures = true
         v.allowsMagnification = true
         v.customUserAgent = Self.userAgent
+        v.uiDelegate = self
+        v.navigationDelegate = self
         observations = [
             v.observe(\.title) { [weak self] _, _ in MainActor.assumeIsolated { self?.changed() } },
             v.observe(\.url) { [weak self] _, _ in MainActor.assumeIsolated { self?.changed() } },
@@ -54,7 +60,34 @@ final class Tab: NSObject {
         if !hasWebView, let u = pendingURL { load(u) } else { _ = webView }
     }
 
+    /// Starts loading without being shown (background tabs).
+    func materializeInBackground() { if !hasWebView, let u = pendingURL { load(u) } }
+
+    func discard() {
+        guard hasWebView else { return }
+        webView.stopLoading()
+        webView.removeFromSuperview()
+        observations = []
+    }
+
     private func changed() { onChange?(self) }
+
+    // MARK: new tabs from the page
+
+    func webView(_ v: WKWebView, createWebViewWith c: WKWebViewConfiguration, for a: WKNavigationAction,
+                 windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = a.request.url { onOpen?(url, a.modifierFlags.contains(.command)) }
+        return nil
+    }
+
+    func webView(_ v: WKWebView, decidePolicyFor a: WKNavigationAction,
+                 decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+        if a.navigationType == .linkActivated, a.modifierFlags.contains(.command), let url = a.request.url {
+            onOpen?(url, !a.modifierFlags.contains(.shift))
+            return decisionHandler(.cancel)
+        }
+        decisionHandler(.allow)
+    }
 
     // Safari's UA, so sites serve the same pages they serve Safari.
     static let userAgent: String = {

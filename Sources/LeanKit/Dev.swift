@@ -34,7 +34,8 @@ enum Dev {
         let windows = app.windows.map { w in
             [
                 "key": w === app.current,
-                "tabs": [["title": w.tab.title, "url": w.tab.url?.absoluteString ?? ""]],
+                "active": w.activeIndex,
+                "tabs": w.tabs.map { ["title": $0.title, "url": $0.url?.absoluteString ?? ""] },
             ] as [String: Any]
         }
         let keys = Dictionary(uniqueKeysWithValues: Commands.shared.all.keys.map { ($0, Commands.shared.key(for: $0) ?? "") })
