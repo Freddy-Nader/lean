@@ -26,7 +26,7 @@ final class SettingsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
         // A page may only touch declared settings and run keys.edit.
         let key = (b["key"] as? String).flatMap { k in s.declared.first { $0.key == k } }
         switch action {
-        case "set": if let key, let v = b["value"] as? String { s.set(key.key, v) }
+        case "set": if let key, let v = b["value"] as? String, s.accepts(key.key, v) { s.set(key.key, v) }
         case "choose": if let key { s.chooseFolder(key.key) }
         case "command": if b["id"] as? String == "keys.edit" { Commands.shared.run("keys.edit") }
         default: break

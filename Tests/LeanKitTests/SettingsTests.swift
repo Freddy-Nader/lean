@@ -15,6 +15,15 @@ import Testing
         s.undeclare(owner: "u")
     }
 
+    @Test func pagesMayOnlyPickDeclaredOptions() {
+        let s = Settings.shared
+        s.declareKernel()
+        #expect(s.accepts("search.template", "https://kagi.com/search?q=%s"))
+        #expect(!s.accepts("search.template", "https://evil.example/?q=%s"))
+        #expect(!s.accepts("downloads.folder", "/tmp"))   // folder settings change only through the open panel
+        #expect(!s.accepts("nope", "x"))
+    }
+
     @Test func kernelDeclaresItsSettings() {
         Settings.shared.declareKernel()
         let keys = Settings.shared.declared.map(\.key)

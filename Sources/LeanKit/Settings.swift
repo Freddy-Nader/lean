@@ -36,6 +36,11 @@ public final class Settings {
         declared.append(Declared(key: key, title: title, icon: icon, options: options.map { (label: $0.0, value: $0.1) }, owner: owner))
     }
 
+    /// Whether a page may set `key` to `value`: only a declared choice setting, only one of its options.
+    func accepts(_ key: String, _ value: String) -> Bool {
+        declared.first { $0.key == key }?.options.contains { $0.value == value } ?? false
+    }
+
     func undeclare(owner: String) { declared.removeAll { $0.owner == owner } }
 
     func declareKernel() {
