@@ -6,18 +6,27 @@ public final class App: NSObject, NSApplicationDelegate {
     public static func main() {
         let app = NSApplication.shared
         let delegate = App()
+        if Dev.sendIfClient() { return }
         app.delegate = delegate
         app.setActivationPolicy(.regular)
         app.run()
     }
 
-    private var windows: [BrowserWindow] = []
+    private(set) var windows: [BrowserWindow] = []
+
+    /// The window commands act on: the key window, else the last one opened.
+    var current: BrowserWindow? {
+        windows.first { $0.window?.isKeyWindow == true } ?? windows.last
+    }
 
     public func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.mainMenu = Self.editMenu()
-        newWindow(url: CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") }))
+        KernelCommands.register(self)
+        Commands.shared.start()
+        newWindow(url: CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") && !$0.hasPrefix("/") }))
         NSApp.activate()
         Bench.launched()
+        Dev.listen(self)
     }
 
     public func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }

@@ -17,3 +17,22 @@ Needs Xcode (Swift 6) and macOS 15.4+.
 ```sh
 LEAN_BENCH=1 build/lean.app/Contents/MacOS/lean   # prints launch_ms and quits
 ```
+
+## Keybindings
+
+Every action is a command. Override keys in `~/.config/lean/keys.json` (reloads on save):
+
+```json
+{ "cmd+e": "address.focus", "cmd+l": null }
+```
+
+`null` unbinds a default.
+
+## Drive the app from a shell (development)
+
+```sh
+open --env LEAN_DEV=1 build/lean.app
+build/lean.app/Contents/MacOS/lean --run page.reload       # run any command id
+build/lean.app/Contents/MacOS/lean --run load github.com   # load an address
+cat ~/.config/lean/dev-state.json                          # windows, tabs, commands + keys
+```

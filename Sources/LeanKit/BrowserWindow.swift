@@ -7,6 +7,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
     private let address = NSTextField()
     private let content = NSView()
     private(set) var tab = Tab()
+    private(set) lazy var find = FindBar { [unowned self] in self.tab.webView }
+    private var findHeight: NSLayoutConstraint!
 
     init() {
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
@@ -33,16 +35,22 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         address.delegate = self
         address.cell?.isScrollable = true
         address.cell?.wraps = false
-        for v in [address, content] {
+        find.field.controlSize = .small
+        find.onVisibility = { [weak self] shown in self?.findHeight.constant = shown ? 30 : 0 }
+        for v in [content, address, find.field] {
             v.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(v)
         }
-        NSLayoutConstraint.activate([
+        findHeight = find.field.heightAnchor.constraint(equalToConstant: 0)
+        NSLayoutConstraint.activate([findHeight,
             address.topAnchor.constraint(equalTo: root.topAnchor, constant: 6),
             address.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 80),
             address.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             address.heightAnchor.constraint(equalToConstant: 24),
-            content.topAnchor.constraint(equalTo: root.topAnchor, constant: 36),
+            find.field.topAnchor.constraint(equalTo: address.bottomAnchor, constant: 6),
+            find.field.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+            find.field.widthAnchor.constraint(equalToConstant: 260),
+            content.topAnchor.constraint(equalTo: address.bottomAnchor, constant: 6),
             content.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             content.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
