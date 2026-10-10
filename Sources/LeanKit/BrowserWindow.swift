@@ -2,10 +2,13 @@ import AppKit
 import WebKit
 
 @MainActor
-final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
+final class BrowserWindow: NSWindowController, NSWindowDelegate {
     /// Posted (object: the window) whenever tabs are added, removed, moved, selected or retitled.
     static let tabsChanged = Notification.Name("lean.tabsChanged")
     static let opened = Notification.Name("lean.windowOpened")
+    /// Set by the tab strip: turns the focused tab into an address field. Returns false if it can't
+    /// (strip hidden, no tab), and the kernel falls back to the palette.
+    static var editAddress: ((BrowserWindow) -> Bool)?
     /// Set by the palette add-on: opens it on this window with `text`; `newTab` makes ↵ open a new tab.
     static var prompt: ((BrowserWindow, _ text: String, _ newTab: Bool) -> Void)?
 
@@ -13,7 +16,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
     private var edgeView: NSView?
     private var edge = "hidden"
     private var edgeConstraints: [NSLayoutConstraint] = []
-    private let address = NSTextField()
+    /// Bottom edge of the top row (nav, tabs, +).
+    private let bar = NSLayoutGuide()
     private let nav = Glass.make(cornerRadius: 14)
     private var navButtons: [NSButton] = []
     /// Centre of the traffic lights from the window top: the top row is centred on it.
@@ -42,13 +46,6 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
     required init?(coder: NSCoder) { fatalError() }
 
     private func layout(in root: NSView) {
-        address.placeholderString = "Search or enter address"
-        address.bezelStyle = .roundedBezel
-        address.focusRingType = .none
-        address.font = .systemFont(ofSize: 13)
-        address.delegate = self
-        address.cell?.isScrollable = true
-        address.cell?.wraps = false
         let close = window?.standardWindowButton(.closeButton), zoom = window?.standardWindowButton(.zoomButton)
         if let close, let p = close.superview {
             let c = root.bounds.height - root.convert(close.frame, from: p).midY
@@ -78,17 +75,15 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         ])
         find.field.controlSize = .small
         find.onVisibility = { [weak self] shown in self?.findHeight.constant = shown ? 30 : 0 }
-        for v in [content, address, find.field] {
+        root.addLayoutGuide(bar)
+        for v in [content, find.field] {
             v.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(v)
         }
         findHeight = find.field.heightAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([findHeight,
-            address.topAnchor.constraint(equalTo: root.topAnchor, constant: rowCentre * 2 + 4),   // until the address moves into the tab
-            address.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 80),
-            address.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
-            address.heightAnchor.constraint(equalToConstant: 24),
-            find.field.topAnchor.constraint(equalTo: address.bottomAnchor, constant: 6),
+            bar.topAnchor.constraint(equalTo: root.topAnchor), bar.heightAnchor.constraint(equalToConstant: rowCentre * 2 - 2),
+            find.field.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 6),
             find.field.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             find.field.widthAnchor.constraint(equalToConstant: 260),
         ])
@@ -108,11 +103,11 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
     private func layoutEdge() {
         guard let root = window?.contentView else { return }
         NSLayoutConstraint.deactivate(edgeConstraints)
-        let top = address.bottomAnchor
+        let top = bar.bottomAnchor
         var c: [NSLayoutConstraint] = []
         if let v = edgeView, edge != "hidden" {
             v.translatesAutoresizingMaskIntoConstraints = false
-            root.addSubview(v, positioned: .below, relativeTo: address)
+            root.addSubview(v, positioned: .above, relativeTo: content)
             switch edge {
             case "top":
                 c += [v.centerYAnchor.constraint(equalTo: root.topAnchor, constant: rowCentre), v.heightAnchor.constraint(equalToConstant: 28),
@@ -183,7 +178,6 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         v.frame = content.bounds
         v.autoresizingMask = [.width, .height]
         content.addSubview(v)
-        address.stringValue = ""
         refresh(t)
         if t.url == nil { focusAddress() } else { window?.makeFirstResponder(v) }
         changed()
@@ -198,7 +192,6 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         if tabs.isEmpty {
             content.subviews.forEach { $0.removeFromSuperview() }
             activeIndex = 0
-            address.stringValue = ""
             window?.title = "lean"
             return changed()
         }
@@ -223,31 +216,16 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         window?.makeFirstResponder(tab.webView)
     }
 
+    /// ⌘L: edit the focused tab in place; without a strip, ask the palette.
     func focusAddress() {
-        window?.makeFirstResponder(address)
-        address.currentEditor()?.selectAll(nil)
+        if Self.editAddress?(self) == true { return }
+        Self.prompt?(self, tab?.url?.absoluteString ?? "", false)
     }
 
     private func refresh(_ t: Tab) {
         changed()
         guard let tab, t === tab else { return }
         window?.title = t.title
-        if address.currentEditor() == nil { address.stringValue = t.url?.absoluteString ?? "" }
-    }
-
-    // Enter in the address field loads; Esc restores the current URL and returns to the page.
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        switch selector {
-        case #selector(NSResponder.insertNewline(_:)):
-            load(address.stringValue); return true
-        case #selector(NSResponder.cancelOperation(_:)):
-            address.stringValue = tab?.url?.absoluteString ?? ""
-            window?.makeFirstResponder(tab?.webView); return true
-        case #selector(NSResponder.moveDown(_:)):
-            guard let prompt = Self.prompt else { return false }
-            prompt(self, address.stringValue == tab?.url?.absoluteString ? "" : address.stringValue, false); return true
-        default: return false
-        }
     }
 
     // MARK: toast

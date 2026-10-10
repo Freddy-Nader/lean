@@ -73,7 +73,7 @@ Rule: the kernel holds only what every user needs to browse. If one person would
 
 `palette` and `tabstrip` are Swift add-ons (native UI, must feel instant); the rest of the defaults are JS. The add-ons page and settings stay in the kernel, so you can always turn add-ons back on.
 
-So the bare browser with every add-on disabled is: one window, tabs switchable only by keys, an address bar, and nothing else. That is the minimal baseline we measure launch time and memory against.
+So the bare browser with every add-on disabled is: one window, tabs switchable only by keys, the focused tab as its own address field, and nothing else. That is the minimal baseline we measure launch time and memory against.
 
 ## Palette (default add-on, ⌘K)
 
@@ -94,7 +94,7 @@ Combines Notion's grouped results with Raycast's interaction model.
 - **Aliases and per-command hotkeys:** assignable from the action panel, written to `keys.json`.
 - **Ranking:** frequency and recency of what you pick, so your common choices rise.
 
-**⌘T** opens a new tab with the address field focused and suggestions underneath. **↓** expands it into the full palette.
+**⌘T** opens the palette; ↵ opens the result in a new tab (with no tab open the palette sits centred and nothing exists until ↵). **⌘L** turns the focused tab into an address field; **↓** there opens the palette with what you typed.
 
 ## Arguments and natural language, without AI
 

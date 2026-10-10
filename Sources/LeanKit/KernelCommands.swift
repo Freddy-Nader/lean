@@ -36,7 +36,7 @@ enum KernelCommands {
         }
         c.register("tab.selectLast", "Go to Last Tab", keys: ["cmd+9"], run: win { $0.select($0.tabs.count - 1) })
 
-        c.register("address.focus", "Focus Address Bar", keys: ["cmd+l"], run: win { $0.focusAddress() })
+        c.register("address.focus", "Edit Address", keys: ["cmd+l"], run: win { $0.focusAddress() })
 
         c.register("page.reload", "Reload Page", keys: ["cmd+r"], run: web { $0.reload() })
         c.register("page.reloadHard", "Reload Ignoring Cache", keys: ["cmd+shift+r"], run: web { $0.reloadFromOrigin() })

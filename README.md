@@ -20,6 +20,8 @@ LEAN_BENCH=1 build/lean.app/Contents/MacOS/lean   # prints launch_ms and quits
 
 ## Keybindings
 
+⌘T opens the palette (↵ opens a new tab), ⌘L edits the focused tab as an address field, ⌘, opens `lean://settings`, ⌘K opens the palette on the current tab.
+
 Every action is a command. Override keys in `~/.config/lean/keys.json` (reloads on save):
 
 ```json

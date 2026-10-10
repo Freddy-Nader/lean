@@ -34,6 +34,7 @@ final class TabStrip: SwiftAddon {
             },
         ]
         App.shared?.windows.forEach(attach)
+        BrowserWindow.editAddress = { [weak self] w in self?.strips[ObjectIdentifier(w)]?.edit() ?? false }
         Settings.shared.declare("tabstrip.position", "Tab Position", icon: "rectangle.split.3x1",
                                 options: ["top", "bottom", "left", "right", "hidden"].map { ($0.capitalized, $0) }, owner: id)
         for (cmd, title, pos) in [("tabstrip.top", "Tabs on Top", "top"), ("tabstrip.left", "Tabs on Left", "left"),
@@ -48,6 +49,7 @@ final class TabStrip: SwiftAddon {
         observers = []
         App.shared?.windows.forEach { $0.setEdge("hidden", nil) }
         strips = [:]
+        BrowserWindow.editAddress = nil
         Settings.shared.undeclare(owner: id)
         Slots.shared.removeNative("tabstrip", owner: id)
     }
@@ -67,6 +69,8 @@ final class TabStrip: SwiftAddon {
         private let stack = NSStackView()
         private let plus = TabButton(plus: true)
         private var pending = false
+        private var buttons: [TabButton] = []
+        private var editing: TabButton?
 
         init(window: BrowserWindow, vertical: Bool) {
             self.owner = window
@@ -113,14 +117,34 @@ final class TabStrip: SwiftAddon {
 
         /// Coalesces bursts of change notifications (loading progress fires many).
         func setNeedsRender() {
-            guard !pending else { return }
+            guard !pending, editing == nil else { return }   // typed text must survive progress updates
             pending = true
             DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.pending = false; self?.render() } }
+        }
+
+        /// Turns the focused tab into an address field holding the full URL.
+        func edit() -> Bool {
+            guard editing == nil, let w = owner, let t = w.tab, buttons.indices.contains(w.activeIndex) else { return false }
+            let b = buttons[w.activeIndex]
+            editing = b
+            b.edit(t.url?.absoluteString ?? "") { [weak self, weak w] end in
+                guard let self, let w else { return }
+                self.editing = nil
+                switch end {
+                case .load(let text): w.load(text)
+                case .cancel: w.window?.makeFirstResponder(w.tab.flatMap { $0.hasWebView ? $0.webView : nil })
+                case .down(let text): BrowserWindow.prompt?(w, text == w.tab?.url?.absoluteString ? "" : text, false)
+                case .blur: break
+                }
+                self.setNeedsRender()
+            }
+            return true
         }
 
         func render() {
             guard let w = owner else { return }
             stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            buttons = []
             var firstPlain: TabButton?
             for (i, t) in w.tabs.enumerated() {
                 let focused = i == w.activeIndex
@@ -129,6 +153,7 @@ final class TabStrip: SwiftAddon {
                 b.onSelect = { [weak w] in w?.select(i) }
                 b.onClose = { [weak w] in w?.close(at: i) }
                 stack.addArrangedSubview(b)
+                buttons.append(b)
                 if vertical { b.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true; continue }
                 // Unfocused tabs share one width (150 ideally) and shrink together; the focused one is wider and shrinks last.
                 let ideal = b.widthAnchor.constraint(equalToConstant: focused ? 360 : 150)
@@ -152,6 +177,11 @@ final class TabStrip: SwiftAddon {
         private let selected: Bool
         private let close = NSButton()
         private var tracking: NSTrackingArea?
+        private var row = NSStackView()
+        private var host: NSView?
+        private var field: NSTextField?
+        private var onEnd: ((End) -> Void)?
+        enum End { case load(String), cancel, down(String), blur }
 
         init(title: String = "", icon: NSImage? = nil, selected: Bool = false, loading: Bool = false, capsule: Bool = false, plus: Bool = false) {
             self.selected = selected
@@ -193,7 +223,8 @@ final class TabStrip: SwiftAddon {
             close.target = self
             close.action = #selector(closeTapped)
             close.isHidden = true
-            let row = NSStackView(views: [iconView, label])
+            self.host = host
+            row = NSStackView(views: [iconView, label])
             row.spacing = 6
             for v in [row, close] as [NSView] { v.translatesAutoresizingMaskIntoConstraints = false; host.addSubview(v) }
             NSLayoutConstraint.activate([
@@ -209,6 +240,39 @@ final class TabStrip: SwiftAddon {
         }
 
         required init?(coder: NSCoder) { fatalError() }
+
+        /// Replaces the title with a borderless field; `done` runs once when editing ends.
+        func edit(_ text: String, done: @escaping (End) -> Void) {
+            guard let host, field == nil else { return }
+            let f = NSTextField(string: text)
+            f.isBordered = false
+            f.drawsBackground = false
+            f.focusRingType = .none
+            f.font = .systemFont(ofSize: selected && host !== self ? 13 : 12)
+            f.alignment = host !== self ? .center : .left
+            f.cell?.isScrollable = true
+            f.cell?.wraps = false
+            f.delegate = self
+            f.translatesAutoresizingMaskIntoConstraints = false
+            host.addSubview(f)
+            NSLayoutConstraint.activate([f.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 10), f.trailingAnchor.constraint(equalTo: close.leadingAnchor, constant: -4),
+                                         f.centerYAnchor.constraint(equalTo: host.centerYAnchor)])
+            row.isHidden = true
+            field = f
+            onEnd = done
+            window?.makeFirstResponder(f)
+            f.currentEditor()?.selectAll(nil)
+        }
+
+        fileprivate func finish(_ end: End) {
+            guard let f = field else { return }
+            field = nil
+            row.isHidden = false
+            f.removeFromSuperview()
+            let done = onEnd
+            onEnd = nil
+            done?(end)
+        }
 
         override func updateTrackingAreas() {
             if let t = tracking { removeTrackingArea(t) }
@@ -226,6 +290,7 @@ final class TabStrip: SwiftAddon {
         /// Everything but the × belongs to the tab, so glass and labels never swallow clicks.
         override func hitTest(_ p: NSPoint) -> NSView? {
             let v = super.hitTest(p)
+            if field != nil { return v }
             return v is NSButton ? v : v == nil ? nil : self
         }
         override func acceptsFirstMouse(for e: NSEvent?) -> Bool { true }
@@ -233,4 +298,19 @@ final class TabStrip: SwiftAddon {
         override func otherMouseUp(with e: NSEvent) { if e.buttonNumber == 2 { onClose() } }
         @objc private func closeTapped() { onClose() }
     }
+}
+
+extension TabStrip.TabButton: NSTextFieldDelegate {
+    // ↵ loads, Esc returns to the page, ↓ opens the palette with the typed text; losing focus just ends editing.
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        switch selector {
+        case #selector(NSResponder.insertNewline(_:)): finish(.load(control.stringValue))
+        case #selector(NSResponder.cancelOperation(_:)): finish(.cancel)
+        case #selector(NSResponder.moveDown(_:)): finish(.down(control.stringValue))
+        default: return false
+        }
+        return true
+    }
+
+    func controlTextDidEndEditing(_ n: Notification) { finish(.blur) }
 }

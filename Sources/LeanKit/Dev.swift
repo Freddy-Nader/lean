@@ -105,6 +105,7 @@ enum Dev {
         let downloads = Downloads.shared.items.map { ["file": $0.file?.path ?? "", "done": $0.done, "failed": $0.failed] as [String: Any] }
         let state: [String: Any] = ["windows": windows, "commands": keys, "downloads": downloads,
                                     "rules": Rules.shared.active, "eval": lastEval, "palette": Palette.shared.isOpen,
+                                    "editing": (app.current?.window?.firstResponder as? NSText).map { "\($0.string) [selected \($0.selectedRange.length)]" } ?? "",
                                     "addons": AddonHost.shared.addons.mapValues { a in
                                         ["loaded": a.isLoaded, "error": a.error ?? "", "commands": a.commandIDs, "logs": a.logs] as [String: Any]
                                     }, "ruleErrors": Rules.shared.errors]
