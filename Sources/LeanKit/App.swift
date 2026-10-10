@@ -36,7 +36,10 @@ public final class App: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = Self.editMenu()
         KernelCommands.register(self)
         Commands.shared.start()
-        AddonHost.shared.onChange = { AddonsPage.shared.refresh() }
+        AddonHost.shared.onChange = { SettingsPage.shared.refresh() }
+        NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { SettingsPage.shared.refresh() }
+        }
         AddonHost.shared.start()
         newWindow(url: CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") && !$0.hasPrefix("/") }))
         NSApp.activate()

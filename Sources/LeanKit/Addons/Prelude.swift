@@ -54,7 +54,12 @@ enum Prelude {
           set: (k, v) => native.storageSet(String(k), json(v)),
           all: () => JSON.parse(native.storageAll()),
         },
-        settings: { get: (k) => native.setting(String(k)) },
+        settings: {
+          get: (k) => native.setting(String(k)),
+          set: (k, v) => native.settingSet(String(k), v),
+          declare: (k, o) => native.settingDeclare(String(k), String((o && o.title) || k),
+            json(((o && o.options) || []).map((x) => typeof x === "string" ? [x, x] : [String(x.label), String(x.value)]))),
+        },
         rules: {
           bundled: () => native.rulesBundled(),
           add: (id, rules) => native.rulesAdd(String(id), typeof rules === "string" ? rules : JSON.stringify(rules)),

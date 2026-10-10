@@ -10,7 +10,7 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
         c.websiteDataStore = .default()
         c.preferences.isElementFullscreenEnabled = true
         c.mediaTypesRequiringUserActionForPlayback = []
-        c.setURLSchemeHandler(AddonsPage.shared, forURLScheme: "lean")
+        c.setURLSchemeHandler(SettingsPage.shared, forURLScheme: "lean")
         return c
     }()
 
@@ -19,7 +19,7 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
         c.userContentController = WKUserContentController()
         Rules.shared.attach(c.userContentController)
         AddonHost.shared.attach(c.userContentController)
-        c.userContentController.add(WeakHandler(AddonsPage.shared), name: "leanAddons")
+        c.userContentController.add(WeakHandler(SettingsPage.shared), name: "leanSettings")
         return c
     }
 

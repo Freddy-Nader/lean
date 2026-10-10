@@ -13,7 +13,7 @@ final class TabStrip: SwiftAddon {
 
     var position: String {
         get { Settings.shared.string("tabstrip.position").isEmpty ? "top" : Settings.shared.string("tabstrip.position") }
-        set { Settings.shared.set("tabstrip.position", newValue); App.shared?.windows.forEach(attach) }
+        set { Settings.shared.set("tabstrip.position", newValue) }
     }
 
     func load() throws {
@@ -24,12 +24,18 @@ final class TabStrip: SwiftAddon {
                 let w = n.object as? BrowserWindow
                 MainActor.assumeIsolated { if let w { self.attach(w) } }
             },
+            nc.addObserver(forName: Settings.changed, object: nil, queue: .main) { n in
+                let key = n.object as? String
+                MainActor.assumeIsolated { if key == nil || key == "tabstrip.position" { App.shared?.windows.forEach(self.attach) } }
+            },
             nc.addObserver(forName: BrowserWindow.tabsChanged, object: nil, queue: .main) { n in
                 let w = n.object as? BrowserWindow
                 MainActor.assumeIsolated { if let w { self.strips[ObjectIdentifier(w)]?.setNeedsRender() } }
             },
         ]
         App.shared?.windows.forEach(attach)
+        Settings.shared.declare("tabstrip.position", "Tab Position", icon: "rectangle.split.3x1",
+                                options: ["top", "bottom", "left", "right", "hidden"].map { ($0.capitalized, $0) }, owner: id)
         for (cmd, title, pos) in [("tabstrip.top", "Tabs on Top", "top"), ("tabstrip.left", "Tabs on Left", "left"),
                                   ("tabstrip.bottom", "Tabs on Bottom", "bottom"), ("tabstrip.right", "Tabs on Right", "right"),
                                   ("tabstrip.hide", "Hide Tab Strip", "hidden")] {
@@ -42,6 +48,7 @@ final class TabStrip: SwiftAddon {
         observers = []
         App.shared?.windows.forEach { $0.setEdge("hidden", nil) }
         strips = [:]
+        Settings.shared.undeclare(owner: id)
         Slots.shared.removeNative("tabstrip", owner: id)
     }
 

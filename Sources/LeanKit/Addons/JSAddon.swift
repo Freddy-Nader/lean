@@ -73,6 +73,7 @@ public final class JSAddon {
         Commands.shared.removeRuntimeBindings(owner: id)
         Slots.shared.removeAll(owner: id)
         PaletteGroups.shared.removeAll(owner: id)
+        Settings.shared.undeclare(owner: id)
         Rules.shared.removeAll(prefix: "\(id).")
         pageScript = nil
         context?.exceptionHandler = nil
@@ -223,6 +224,13 @@ public final class JSAddon {
         let storageAll: @convention(block) () -> String = { main { AddonStorage.json(owner) } }
         let storageSet: @convention(block) (String, String) -> Void = { k, v in main { AddonStorage.set(owner, k, json: v) } }
         let setting: @convention(block) (String) -> Any = { k in main { Settings.shared.value(k) ?? NSNull() } }
+        let settingDeclare: @convention(block) (String, String, String) -> Void = { key, title, opts in
+            main {
+                let o = (try? JSONSerialization.jsonObject(with: Data(opts.utf8))) as? [[String]] ?? []
+                Settings.shared.declare(key, title, options: o.map { ($0[0], $0[1]) }, owner: owner)
+            }
+        }
+        let settingSet: @convention(block) (String, JSValue) -> Void = { key, v in main { Settings.shared.set(key, v.toObject()) } }
         let rulesAdd: @convention(block) (String, String) -> Void = { rid, json in main { Rules.shared.add("\(owner).\(rid)", json: json) } }
         let rulesRemove: @convention(block) (String) -> Void = { rid in main { Rules.shared.remove("\(owner).\(rid)") } }
         let fetch: @convention(block) (String, String, JSValue) -> Void = { url, opts, cb in
@@ -270,7 +278,7 @@ public final class JSAddon {
         set("activeTab", activeTab); set("listTabs", listTabs); set("openTab", openTab)
         set("tabAction", tabAction); set("evalInTab", evalInTab); set("sendToTab", sendToTab)
         set("bind", bind); set("toast", toast)
-        set("storageAll", storageAll); set("storageSet", storageSet); set("setting", setting)
+        set("storageAll", storageAll); set("storageSet", storageSet); set("setting", setting); set("settingDeclare", settingDeclare); set("settingSet", settingSet)
         set("rulesAdd", rulesAdd); set("rulesRemove", rulesRemove); set("fetch", fetch)
         set("provide", provide); set("paletteGroup", paletteGroup); set("setTimeout", setTimeout)
         return n

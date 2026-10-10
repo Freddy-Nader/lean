@@ -6,6 +6,7 @@ import WebKit
 enum KernelCommands {
     static func register(_ app: App) {
         let c = Commands.shared
+        Settings.shared.declareKernel()
         func win(_ f: @escaping (BrowserWindow) -> Void) -> () -> Void {
             { if let w = app.current { f(w) } }
         }
@@ -56,8 +57,20 @@ enum KernelCommands {
             t.webView.reload()
         })
 
-        c.register("addons.open", "Add-ons", keys: ["cmd+shift+a"], run: win { w in
-            if let i = w.tabs.firstIndex(where: { $0.url == AddonsPage.url }) { w.select(i) } else { w.open(AddonsPage.url, background: false) }
+        /// Selects an open lean:// tab (pointing it at `url`), else opens `url` in a new tab.
+        func page(_ url: URL) -> () -> Void {
+            win { w in
+                if let i = w.tabs.firstIndex(where: { $0.url?.scheme == "lean" }) {
+                    w.select(i)
+                    if w.tabs[i].url != url { w.tabs[i].load(url) }
+                } else { w.open(url, background: false) }
+            }
+        }
+        c.register("settings.open", "Settings", keys: ["cmd+,"], run: page(SettingsPage.url))
+        c.register("addons.open", "Add-ons", keys: ["cmd+shift+a"], run: page(URL(string: "lean://settings#addons")!))
+        c.register("keys.edit", "Edit Keybindings", run: {
+            if !FileManager.default.fileExists(atPath: Commands.keysFile.path) { try? "{\n}\n".write(to: Commands.keysFile, atomically: true, encoding: .utf8) }
+            NSWorkspace.shared.open(Commands.keysFile)
         })
 
         c.register("devtools.toggle", "Developer Tools", keys: ["cmd+alt+i"], run: web(Inspector.toggle))

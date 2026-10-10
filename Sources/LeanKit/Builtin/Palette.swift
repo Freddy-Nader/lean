@@ -147,6 +147,7 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         let cmds = ranked(commandItems(), limit: q.isEmpty ? 0 : 6)
         out.append(("Commands", q.isEmpty ? frequentCommands() : cmds))
         out.append(("Settings", q.isEmpty ? [] : ranked(settingItems(), limit: 4)))
+        if !q.isEmpty { out.append(("Add-ons", ranked(addonItems(), limit: 4))) }
         for g in PaletteGroups.shared.query(q) {
             out.append((g.group, g.rows.prefix(6).map { r in
                 Item(icon: "clock", title: r.title, subtitle: r.subtitle, key: "row:\(r.subtitle)", run: r.run)
@@ -187,44 +188,36 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
             .sorted { $0.1 > $1.1 }.prefix(4).map(\.0)
     }
 
+    /// One row per declared setting: choices push a list (✓ on the current value), folders open a panel.
     private func settingItems() -> [Item] {
         let s = Settings.shared
-        let engines = [("Google", "https://www.google.com/search?q=%s"), ("DuckDuckGo", "https://duckduckgo.com/?q=%s"),
-                       ("Kagi", "https://kagi.com/search?q=%s"), ("Perplexity", "https://www.perplexity.ai/search?q=%s"),
-                       ("Bing", "https://www.bing.com/search?q=%s")]
-        let positions = ["top", "bottom", "left", "right", "hidden"]
-        return [
-            Item(icon: "arrow.down.circle", title: "Downloads Folder", subtitle: s.string("downloads.folder"),
-                 accessory: "Setting", key: "set:downloads.folder", primary: "Choose…") {
-                let p = NSOpenPanel()
-                p.canChooseDirectories = true; p.canChooseFiles = false
-                p.directoryURL = s.path("downloads.folder")
-                if p.runModal() == .OK, let u = p.url { s.set("downloads.folder", (u.path as NSString).abbreviatingWithTildeInPath) }
-            },
-            Item(icon: "magnifyingglass", title: "Search Engine", subtitle: engines.first { $0.1 == s.string("search.template") }?.0 ?? s.string("search.template"),
-                 accessory: "Setting", key: "set:search.template", primary: "Change", push: {
-                Level(placeholder: "Search engine") { q in
-                    [("Search Engine", engines.filter { Rank.match(q, $0.0) != nil }.map { e in
-                        Item(icon: "magnifyingglass", title: e.0, subtitle: e.1, key: "engine:\(e.0)", primary: "Use") { s.set("search.template", e.1) }
+        return s.declared.map { d in
+            let cur = s.string(d.key).isEmpty ? (d.options.first?.value ?? "") : s.string(d.key)
+            if d.options.isEmpty {
+                return Item(icon: d.icon, title: d.title, subtitle: s.string(d.key), accessory: "Setting", key: "set:\(d.key)",
+                            primary: "Choose…") { s.chooseFolder(d.key) }
+            }
+            return Item(icon: d.icon, title: d.title, subtitle: d.options.first { $0.value == cur }?.label ?? cur, accessory: "Setting",
+                        key: "set:\(d.key)", primary: "Change", push: {
+                Level(placeholder: d.title) { q in
+                    [(d.title, d.options.filter { Rank.match(q, $0.label) != nil }.map { o in
+                        Item(icon: d.icon, title: o.label, accessory: o.value == cur ? "✓" : "", key: "opt:\(d.key):\(o.value)", primary: "Use") { s.set(d.key, o.value) }
                     })]
                 }
-            }),
-            Item(icon: "rectangle.split.3x1", title: "Tab Position", subtitle: TabStrip.shared.position,
-                 accessory: "Setting", key: "set:tabstrip.position", primary: "Change", push: {
-                Level(placeholder: "Tab position") { q in
-                    [("Tab Position", positions.filter { Rank.match(q, $0) != nil }.map { p in
-                        Item(icon: "rectangle.split.3x1", title: p.capitalized, key: "pos:\(p)", primary: "Use") { TabStrip.shared.position = p }
-                    })]
-                }
-            }),
-            Item(icon: "puzzlepiece.extension", title: "Add-ons", subtitle: "lean://addons", accessory: "Setting",
-                 key: "set:addons", primary: "Open") { Commands.shared.run("addons.open") },
-            Item(icon: "keyboard", title: "Edit Keybindings", subtitle: "~/.config/lean/keys.json", accessory: "Setting",
-                 key: "set:keys", primary: "Open File") {
-                if !FileManager.default.fileExists(atPath: Commands.keysFile.path) { try? "{\n}\n".write(to: Commands.keysFile, atomically: true, encoding: .utf8) }
-                NSWorkspace.shared.open(Commands.keysFile)
-            },
-        ]
+            })
+        }
+    }
+
+    /// Add-ons that are switched off, so they can be found and turned on from the palette.
+    private func addonItems() -> [Item] {
+        let host = AddonHost.shared
+        let all: [(id: String, name: String, summary: String, kind: JSAddon.Kind)] =
+            host.addons.values.map { ($0.id, $0.name.isEmpty ? $0.id : $0.name, $0.summary, $0.kind) }
+            + SwiftAddons.all.map { ($0.id, $0.name, $0.summary, $0.kind) }
+        return all.filter { !host.isEnabled($0.id, $0.kind) }.map { a in
+            Item(icon: "puzzlepiece.extension", title: "Turn On \(a.name)", subtitle: a.summary, accessory: "Add-on", key: "addon:\(a.id)",
+                 primary: "Turn On") { host.setEnabled(a.id, true); App.shared?.current?.toast("\(a.name) turned on") }
+        }
     }
 
     private func webItem(_ q: String) -> Item {
