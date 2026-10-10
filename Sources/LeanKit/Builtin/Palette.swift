@@ -151,7 +151,9 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         if !q.isEmpty { out.append(("Add-ons", ranked(addonItems(), limit: 4))) }
         for g in PaletteGroups.shared.query(q) {
             out.append((g.group, g.rows.prefix(6).map { r in
-                Item(icon: "clock", title: r.title, subtitle: r.subtitle, key: "row:\(r.subtitle)", run: r.run)
+                let o = opener(r.url)
+                return Item(icon: "clock", title: r.title, subtitle: r.subtitle, accessory: o.accessory, key: "row:\(r.subtitle)",
+                            run: { r.run(); o.run() }, alt: o.alt.map { a in { r.run(); a() } })
             }))
         }
         if !q.trimmingCharacters(in: .whitespaces).isEmpty { out.append(("Web", [webItem(q)])) }
@@ -221,16 +223,22 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         }
     }
 
+    /// How a URL row opens: a new tab in new-tab mode or an empty window, else the current tab; ⌘↵ does the other.
+    private func opener(_ url: URL?) -> (run: () -> Void, alt: (() -> Void)?, accessory: String) {
+        guard let url else { return ({}, nil, "") }
+        let w = host
+        let fresh = newTab || w?.tab == nil
+        let inTab: () -> Void = { if let t = w?.tab { t.load(url) } else { w?.open(url, background: false) } }
+        let inNew: () -> Void = { w?.open(url, background: false) }
+        return (fresh ? inNew : inTab, w?.tab == nil ? nil : fresh ? inTab : inNew, w?.tab == nil ? "" : fresh ? "⌘↵ this tab" : "⌘↵ new tab")
+    }
+
     private func webItem(_ q: String) -> Item {
         let url = Address.resolve(q)
         let isSearch = url == nil || (!Address.looksLikeHost(q) && !q.contains("://"))
-        let w = host
-        let fresh = newTab || w?.tab == nil
-        let inTab = { if let u = url { if let t = w?.tab { t.load(u) } else { w?.open(u, background: false) } } }
-        let inNew = { if let u = url { w?.open(u, background: false) } }
+        let o = opener(url)
         return Item(icon: isSearch ? "magnifyingglass" : "arrow.up.right", title: isSearch ? "Search the web for “\(q)”" : "Open \(q)",
-                    subtitle: url?.host() ?? "", accessory: w?.tab == nil ? "" : fresh ? "⌘↵ this tab" : "⌘↵ new tab", key: "web", primary: isSearch ? "Search" : "Open",
-                    run: fresh ? inNew : inTab, alt: w?.tab == nil ? nil : fresh ? inTab : inNew)
+                    subtitle: url?.host() ?? "", accessory: o.accessory, key: "web", primary: isSearch ? "Search" : "Open", run: o.run, alt: o.alt)
     }
 
     // MARK: table
