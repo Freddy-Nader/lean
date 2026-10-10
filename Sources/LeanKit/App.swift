@@ -8,6 +8,9 @@ public final class App: NSObject, NSApplicationDelegate {
         let app = NSApplication.shared
         let delegate = App()
         if Dev.sendIfClient() { return }
+        if let i = CommandLine.arguments.firstIndex(of: "--check"), i + 1 < CommandLine.arguments.count {
+            exit(Check.run(CommandLine.arguments[i + 1]))
+        }
         app.delegate = delegate
         app.setActivationPolicy(.regular)
         app.run()

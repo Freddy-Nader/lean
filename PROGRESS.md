@@ -14,7 +14,7 @@ Checkpoint state for resuming an interrupted run. One commit per checkpoint.
 | 6 | Default add-ons (palette, tabstrip, adblock, history, downloads-panel, session, link-copy) + optional darkmode | done |
 | 6a | Swift add-on protocol, Rank service, palette, tab strip | done |
 | 7 | Import add-on (Chromium history/bookmarks/cookies, Safari history/bookmarks) | done |
-| 8 | `/addon` skill + `lean --check` | todo |
+| 8 | `/addon` skill + `lean --check` + full API.md | done |
 | 9 | Phase 2: Chrome extensions, Web Store, password test | todo (needs manual testing) |
 
 Measured: launch ~170 ms warm (`LEAN_BENCH=1`), binary ~150 KB.

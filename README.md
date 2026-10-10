@@ -60,3 +60,14 @@ python3 -I tests/test_rules.py   # converter tests
 
 With `LEAN_DEV=1`, `lean --run key cmd+k`, `lean --run type "new tab"` and `lean --run key return`
 synthesize real key events (through the key map and focused field), so whole flows can be scripted.
+
+## Writing add-ons
+
+See [API.md](API.md). Check a file before using it:
+
+```sh
+build/lean.app/Contents/MacOS/lean --check ~/.config/lean/addons/my-addon.js
+```
+
+With Claude Code in this repo, `/addon <what you want>` writes one for you
+(`.agents/skills/addon/SKILL.md`).
