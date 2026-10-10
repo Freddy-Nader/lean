@@ -67,6 +67,24 @@ final class AddonsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
             </section>
             """
         }.joined()
+        let native = SwiftAddons.all.map { a -> String in
+            let on = host.isEnabled(a.id, a.kind)
+            let cmds = Commands.shared.all.values.filter { $0.owner == a.id }.map(\.id).sorted().map { id in
+                "<code>\(esc(id))</code>" + (Commands.shared.key(for: id).map { " <kbd>\(esc($0))</kbd>" } ?? "")
+            }.joined(separator: " ")
+            let err = SwiftAddons.errors[a.id].map { "<pre class=err>\(esc($0))</pre>" } ?? ""
+            return """
+            <section class="\(on ? "" : "off")">
+              <header>
+                <label><input type=checkbox \(on ? "checked" : "") onchange="act(this.checked?'enable':'disable','\(a.id)')">
+                <b>\(esc(a.name))</b></label>
+                <span class=kind>\(a.kind.rawValue) · swift</span>
+              </header>
+              <p>\(esc(a.summary))</p>
+              \(cmds.isEmpty ? "" : "<p class=cmds>\(cmds)</p>")\(err)
+            </section>
+            """
+        }.joined()
         let slots = Slots.names.map { "<tr><td><code>\($0)</code></td><td>\(esc(Slots.shared.owner(of: $0) ?? "kernel default"))</td></tr>" }.joined()
         return """
         <!doctype html><meta charset=utf-8><title>Add-ons</title>
@@ -85,7 +103,7 @@ final class AddonsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
         </style>
         <h1>Add-ons</h1>
         <p>Drop a <code>.js</code> file into <code>~/.config/lean/addons/</code>; it loads on save. Copy a shipped add-on there to fork it.</p>
-        \(rows.isEmpty ? "<p>No add-ons yet.</p>" : rows)
+        \(native)\(rows)
         <h2>Slots</h2><table>\(slots)</table>
         <script>const act = (action, id) => webkit.messageHandlers.leanAddons.postMessage({ action, id });</script>
         """

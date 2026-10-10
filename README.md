@@ -55,3 +55,8 @@ WebKit's cache. Pause on a site with the `rules.togglePause` command.
 ```sh
 python3 -I tests/test_rules.py   # converter tests
 ```
+
+## Testing keyboard flows
+
+With `LEAN_DEV=1`, `lean --run key cmd+k`, `lean --run type "new tab"` and `lean --run key return`
+synthesize real key events (through the key map and focused field), so whole flows can be scripted.

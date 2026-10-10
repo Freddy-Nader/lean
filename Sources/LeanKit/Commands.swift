@@ -26,6 +26,11 @@ public final class Commands {
         rebuildBindings()
     }
 
+    func unregisterAll(owner: String) {
+        all = all.filter { $0.value.owner != owner }
+        rebuildBindings()
+    }
+
     public func unregister(_ id: String) {
         all[id] = nil
         rebuildBindings()

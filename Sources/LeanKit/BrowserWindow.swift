@@ -3,7 +3,16 @@ import WebKit
 
 @MainActor
 final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
+    /// Posted (object: the window) whenever tabs are added, removed, moved, selected or retitled.
+    static let tabsChanged = Notification.Name("lean.tabsChanged")
+    static let opened = Notification.Name("lean.windowOpened")
+    /// Set by the palette add-on: ↓ in the address field opens it with the typed text.
+    static var addressDown: ((BrowserWindow, String) -> Void)?
+
     var onClose: (() -> Void)?
+    private var edgeView: NSView?
+    private var edge = "hidden"
+    private var edgeConstraints: [NSLayoutConstraint] = []
     private let address = NSTextField()
     private let content = NSView()
     private(set) var tabs: [Tab] = []
@@ -52,12 +61,57 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
             find.field.topAnchor.constraint(equalTo: address.bottomAnchor, constant: 6),
             find.field.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             find.field.widthAnchor.constraint(equalToConstant: 260),
-            content.topAnchor.constraint(equalTo: address.bottomAnchor, constant: 6),
-            content.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            content.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
+        layoutEdge()
     }
+
+    // MARK: edge (tab strip) layout
+
+    /// Places an add-on view along one edge: "top", "bottom", "left", "right"; "hidden" or nil removes it.
+    func setEdge(_ edge: String, _ view: NSView?) {
+        edgeView?.removeFromSuperview()
+        self.edge = view == nil ? "hidden" : edge
+        edgeView = view
+        layoutEdge()
+    }
+
+    private func layoutEdge() {
+        guard let root = window?.contentView else { return }
+        NSLayoutConstraint.deactivate(edgeConstraints)
+        let top = address.bottomAnchor
+        var c: [NSLayoutConstraint] = []
+        if let v = edgeView, edge != "hidden" {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            root.addSubview(v, positioned: .below, relativeTo: address)
+            switch edge {
+            case "top":
+                c += [v.topAnchor.constraint(equalTo: top, constant: 4), v.heightAnchor.constraint(equalToConstant: 30),
+                      v.leadingAnchor.constraint(equalTo: root.leadingAnchor), v.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+                      content.topAnchor.constraint(equalTo: v.bottomAnchor), content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+                      content.leadingAnchor.constraint(equalTo: root.leadingAnchor), content.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
+            case "bottom":
+                c += [v.bottomAnchor.constraint(equalTo: root.bottomAnchor), v.heightAnchor.constraint(equalToConstant: 30),
+                      v.leadingAnchor.constraint(equalTo: root.leadingAnchor), v.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+                      content.topAnchor.constraint(equalTo: top, constant: 6), content.bottomAnchor.constraint(equalTo: v.topAnchor),
+                      content.leadingAnchor.constraint(equalTo: root.leadingAnchor), content.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
+            default: // left / right sidebar
+                let left = edge == "left"
+                c += [v.topAnchor.constraint(equalTo: top, constant: 6), v.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+                      v.widthAnchor.constraint(equalToConstant: 220),
+                      left ? v.leadingAnchor.constraint(equalTo: root.leadingAnchor) : v.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+                      content.topAnchor.constraint(equalTo: top, constant: 6), content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+                      left ? content.leadingAnchor.constraint(equalTo: v.trailingAnchor) : content.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+                      left ? content.trailingAnchor.constraint(equalTo: root.trailingAnchor) : content.trailingAnchor.constraint(equalTo: v.leadingAnchor)]
+            }
+        } else {
+            c += [content.topAnchor.constraint(equalTo: top, constant: 6), content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+                  content.leadingAnchor.constraint(equalTo: root.leadingAnchor), content.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
+        }
+        edgeConstraints = c
+        NSLayoutConstraint.activate(c)
+    }
+
+    private func changed() { NotificationCenter.default.post(name: Self.tabsChanged, object: self) }
 
     // MARK: tabs
 
@@ -68,6 +122,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         let i = tabs.isEmpty ? 0 : activeIndex + 1
         tabs.insert(t, at: i)
         if select { self.select(i) } else if i <= activeIndex { activeIndex += 1 }
+        changed()
         AddonHost.shared.emit("tabCreated", AddonHost.describe(t) as! [String: Any])
     }
 
@@ -92,6 +147,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         address.stringValue = ""
         refresh(t)
         if t.url == nil { focusAddress() } else { window?.makeFirstResponder(v) }
+        changed()
     }
 
     func close(at i: Int) {
@@ -102,6 +158,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         t.discard()
         if tabs.isEmpty { return close() }
         if i < activeIndex { activeIndex -= 1 } else if i == activeIndex { select(min(i, tabs.count - 1)) }
+        changed()
     }
 
     func move(by d: Int) {
@@ -109,6 +166,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         guard tabs.indices.contains(j) else { return }
         tabs.swapAt(activeIndex, j)
         activeIndex = j
+        changed()
     }
 
     func cycle(_ d: Int) { select((activeIndex + d + tabs.count) % tabs.count) }
@@ -125,6 +183,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
     }
 
     private func refresh(_ t: Tab) {
+        changed()
         guard t === tab else { return }
         window?.title = t.title
         if address.currentEditor() == nil { address.stringValue = t.url?.absoluteString ?? "" }
@@ -138,6 +197,9 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         case #selector(NSResponder.cancelOperation(_:)):
             address.stringValue = tab.url?.absoluteString ?? ""
             window?.makeFirstResponder(tab.webView); return true
+        case #selector(NSResponder.moveDown(_:)):
+            guard let open = Self.addressDown else { return false }
+            open(self, address.stringValue == tab.url?.absoluteString ? "" : address.stringValue); return true
         default: return false
         }
     }

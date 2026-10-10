@@ -62,6 +62,7 @@ public final class AddonHost: NSObject, WKScriptMessageHandler {
             if isEnabled(id, kind) { a.load() }
         }
         refreshScripts()
+        SwiftAddons.sync()
         onChange?()
     }
 
@@ -91,10 +92,10 @@ public final class AddonHost: NSObject, WKScriptMessageHandler {
     }
 
     public func setEnabled(_ id: String, _ on: Bool) {
-        guard let a = addons[id] else { return }
-        let key = a.kind == .optional ? "addons.enabled" : "addons.disabled"
+        guard let kind = addons[id]?.kind ?? SwiftAddons.find(id)?.kind else { return }
+        let key = kind == .optional ? "addons.enabled" : "addons.disabled"
         var list = Set(Settings.shared.strings(key))
-        if (a.kind == .optional) == on { list.insert(id) } else { list.remove(id) }
+        if (kind == .optional) == on { list.insert(id) } else { list.remove(id) }
         Settings.shared.set(key, list.sorted())
         reload(id)
     }

@@ -9,6 +9,11 @@ public final class Slots {
     public static let names = ["downloads", "history", "palette", "tabstrip", "newtab", "suggest", "search", "session"]
 
     private var providers: [String: [(owner: String, impl: JSValue)]] = [:]
+    /// Native providers (Swift add-ons) for UI slots like palette and tabstrip.
+    private var native: [String: String] = [:]
+
+    func provideNative(_ name: String, owner: String) { native[name] = owner }
+    func removeNative(_ name: String, owner: String) { if native[name] == owner { native[name] = nil } }
 
     func provide(_ name: String, _ impl: JSValue, owner: String) {
         providers[name, default: []].removeAll { $0.owner == owner }
@@ -19,7 +24,7 @@ public final class Slots {
         for k in providers.keys { providers[k]?.removeAll { $0.owner == owner } }
     }
 
-    public func owner(of name: String) -> String? { providers[name]?.last?.owner }
+    public func owner(of name: String) -> String? { providers[name]?.last?.owner ?? native[name] }
 
     /// Calls `method` on the slot's provider; nil when nobody provides it or the call fails.
     func call(_ name: String, _ method: String, _ args: [Any]) -> Any? {
