@@ -10,7 +10,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/$CONFIG/Lean" "$APP/Contents/MacOS/lean"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 [ -d Resources/rules ] || python3 -I scripts/rules.py Resources/rules
-cp -R Resources/rules "$APP/Contents/Resources/"
+cp -Rp Resources/rules "$APP/Contents/Resources/"   # -p keeps mtimes, so WebKit's compiled-list cache stays valid
 [ -d addons ] && cp -R addons "$APP/Contents/Resources/"
 codesign --force --sign - "$APP" >/dev/null 2>&1
 echo "built $APP"

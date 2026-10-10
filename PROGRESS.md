@@ -17,4 +17,9 @@ Checkpoint state for resuming an interrupted run. One commit per checkpoint.
 | 8 | `/addon` skill + `lean --check` + full API.md | done |
 | 9 | Phase 2: Chrome extensions, Web Store, password test | todo (needs manual testing) |
 
-Measured: launch ~170 ms warm (`LEAN_BENCH=1`), binary ~150 KB.
+Measured (2026-10-10): launch ~230 ms warm with 6 JS add-ons (`LEAN_BENCH=1`; ~170 ms bare kernel),
+memory footprint ~80 MB on a cached launch, binary ~960 KB. Kernel ~1.9k lines Swift, built-in Swift
+add-ons ~800, JS add-ons ~250.
+
+Not built yet (in SPEC, outside the 8 checkpoints): natural-language argument pills, the `decide` API,
+Chrome extensions / Web Store, drag-to-reorder in the tab strip, Safari cookie import.
