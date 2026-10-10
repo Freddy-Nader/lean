@@ -2,6 +2,14 @@
 
 The only contract add-ons, and the AI writing them, rely on. Anything not here does not exist.
 
+## Where add-ons live
+
+- `~/.config/lean/addons/<id>.js` — yours. The file name is the id. Loads on save (hot reload).
+- Shipped: `addons/default/` (on unless disabled) and `addons/optional/` (off unless enabled). A file in
+  your folder with the same id overrides the shipped one: copy it there to fork it.
+- `lean://addons` (⌘⇧A) lists every add-on with its switch, commands, last error and log.
+- Storage lives in `~/.config/lean/addons/.<id>.data.json`.
+
 ## JS add-on shape
 
 ```js
@@ -20,6 +28,7 @@ export default {
   },
 
   // runs in the host JSContext
+  setup(ctx) {},                 // once, after load
   onTabLoad(tab) {},
   onTabCreated(tab) {},
   onTabClosed(tab) {},
@@ -50,19 +59,24 @@ export default {
 | `settings` | `get(key)` — values declared in the add-on's `settings` field |
 | `slots` | `provide(name, impl)` — replace a kernel subsystem (`downloads`, `history`, `palette`, `tabstrip`, `newtab`, `suggest`, `search`, `session`) |
 | `decide` | `choice(state, options)`, `score(state, rubric)`, `bool(state, question)` → result + `confidence`; pass `{rules, threshold}` |
-| `hooks` | `on(name, fn)` — `beforeNavigate` and `beforeDownload` may return `{cancel}` or `{redirect}` / `{handled}`; others are observe-only |
+| `hooks` | `on(name, fn)` — `beforeNavigate({url, tab})` may return `{cancel: true}` or `{redirect: url}`; `beforeDownload({url, filename})` may return `{cancel: true}` or `{path}`; `tabCreated`, `tabLoaded`, `tabClosed`, `message` are observe-only |
 
 ## Replacing a subsystem
 
 ```js
-// downloads go to a dated folder and open in Finder instead of the default panel
+// downloads go to a dated folder
 export default {
-  id: "dated-downloads",
-  setup({ slots, hooks }) {
-    hooks.on("beforeDownload", (dl) => {
-      dl.saveTo(`~/Downloads/${new Date().toISOString().slice(0, 10)}/${dl.filename}`);
-      return { handled: true };
-    });
+  name: "Dated downloads",
+  beforeDownload({ filename }) {
+    return { path: `~/Downloads/${new Date().toISOString().slice(0, 10)}/${filename}` };
+  },
+};
+
+// a different search engine, by providing the `search` slot
+export default {
+  name: "DuckDuckGo",
+  setup({ slots }) {
+    slots.provide("search", { url: (q) => "https://duckduckgo.com/?q=" + encodeURIComponent(q) });
   },
 };
 ```
@@ -72,7 +86,15 @@ Shipped add-ons in `addons/default/` and `addons/optional/` are the reference: c
 ## Page API (`page.run` argument)
 
 - `on(event, fn)`: receive `tab.send(event, data)` from the host.
-- `emit(event, data)`: send to the host (`onMessage` handler).
+- `emit(event, data)`: send to the host; arrives as `onMessage({ tab, event, data })`.
+
+Page code runs in the add-on's own isolated world: it sees the page's DOM, not the page's JavaScript
+variables, and other add-ons cannot see it.
+
+## Globals in the host context
+
+`console.log` (shown in the add-ons page log), `setTimeout`, and standard JavaScript. No `fetch`:
+use `ctx.net.fetch`.
 
 ## Swift add-on shape
 

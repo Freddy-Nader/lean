@@ -9,22 +9,36 @@ public final class Commands {
         public let id: String
         public let title: String
         public let defaultKeys: [String]
+        public let owner: String
         let run: () -> Void
     }
 
     private(set) var all: [String: Command] = [:]
     private var bindings: [Key: String] = [:]
     private var userOverrides: [String: String?] = [:]
+    private var runtime: [String: (id: String?, owner: String)] = [:]
     private var monitor: Any?
     private var watcher: DispatchSourceFileSystemObject?
 
-    public func register(_ id: String, _ title: String, keys: [String] = [], run: @escaping () -> Void) {
-        all[id] = Command(id: id, title: title, defaultKeys: keys, run: run)
+    public func register(_ id: String, _ title: String, keys: [String] = [], owner: String = "kernel",
+                         run: @escaping () -> Void) {
+        all[id] = Command(id: id, title: title, defaultKeys: keys, owner: owner, run: run)
         rebuildBindings()
     }
 
     public func unregister(_ id: String) {
         all[id] = nil
+        rebuildBindings()
+    }
+
+    /// Bindings set by add-ons at runtime (`keys.bind`). keys.json still wins.
+    func bindRuntime(_ key: String, _ id: String?, owner: String) {
+        runtime[key] = (id, owner)
+        rebuildBindings()
+    }
+
+    func removeRuntimeBindings(owner: String) {
+        runtime = runtime.filter { $0.value.owner != owner }
         rebuildBindings()
     }
 
@@ -54,6 +68,10 @@ public final class Commands {
     private func rebuildBindings() {
         var b: [Key: String] = [:]
         for c in all.values { for k in c.defaultKeys { if let key = Key(k) { b[key] = c.id } } }
+        for (k, r) in runtime {
+            guard let key = Key(k) else { continue }
+            if let id = r.id { b[key] = id } else { b[key] = nil }
+        }
         for (k, id) in userOverrides {
             guard let key = Key(k) else { continue }
             if let id { b[key] = id } else { b[key] = nil }

@@ -60,6 +60,10 @@ public final class Rules {
         active[id] = nil
     }
 
+    public func removeAll(prefix: String) {
+        for id in lists.keys where id.hasPrefix(prefix) { remove(id) }
+    }
+
     private func install(_ id: String, _ list: WKContentRuleList, count: Int) {
         remove(id)
         lists[id] = list

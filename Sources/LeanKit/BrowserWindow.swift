@@ -68,12 +68,15 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         let i = tabs.isEmpty ? 0 : activeIndex + 1
         tabs.insert(t, at: i)
         if select { self.select(i) } else if i <= activeIndex { activeIndex += 1 }
+        AddonHost.shared.emit("tabCreated", AddonHost.describe(t) as! [String: Any])
     }
 
-    func open(_ url: URL, background: Bool, opener: Tab? = nil) {
+    @discardableResult
+    func open(_ url: URL, background: Bool, opener: Tab? = nil) -> Tab {
         let t = Tab(url: url)
         add(t, select: !background)
         if background { t.materializeInBackground() }
+        return t
     }
 
     func select(_ i: Int) {
@@ -95,6 +98,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         guard tabs.indices.contains(i) else { return }
         let t = tabs.remove(at: i)
         Tab.closed.append(t.url)
+        AddonHost.shared.emit("tabClosed", AddonHost.describe(t) as! [String: Any])
         t.discard()
         if tabs.isEmpty { return close() }
         if i < activeIndex { activeIndex -= 1 } else if i == activeIndex { select(min(i, tabs.count - 1)) }
@@ -135,6 +139,36 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
             address.stringValue = tab.url?.absoluteString ?? ""
             window?.makeFirstResponder(tab.webView); return true
         default: return false
+        }
+    }
+
+    // MARK: toast
+
+    private var toastLabel: NSTextField?
+
+    func toast(_ text: String) {
+        guard let root = window?.contentView else { return }
+        toastLabel?.removeFromSuperview()
+        let l = NSTextField(labelWithString: text)
+        l.font = .systemFont(ofSize: 12, weight: .medium)
+        l.textColor = .white
+        l.wantsLayer = true
+        l.drawsBackground = true
+        l.backgroundColor = NSColor.black.withAlphaComponent(0.8)
+        l.layer?.cornerRadius = 6
+        l.alignment = .center
+        l.lineBreakMode = .byTruncatingTail
+        l.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(l)
+        NSLayoutConstraint.activate([
+            l.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            l.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -24),
+            l.widthAnchor.constraint(lessThanOrEqualTo: root.widthAnchor, constant: -48),
+            l.heightAnchor.constraint(equalToConstant: 26),
+        ])
+        toastLabel = l
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self, weak l] in
+            MainActor.assumeIsolated { if self?.toastLabel === l { l?.removeFromSuperview() } }
         }
     }
 

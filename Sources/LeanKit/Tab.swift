@@ -10,6 +10,7 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
         c.websiteDataStore = .default()
         c.preferences.isElementFullscreenEnabled = true
         c.mediaTypesRequiringUserActionForPlayback = []
+        c.setURLSchemeHandler(AddonsPage.shared, forURLScheme: "lean")
         return c
     }()
 
@@ -17,6 +18,8 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
         let c = base.copy() as! WKWebViewConfiguration
         c.userContentController = WKUserContentController()
         Rules.shared.attach(c.userContentController)
+        AddonHost.shared.attach(c.userContentController)
+        c.userContentController.add(WeakHandler(AddonsPage.shared), name: "leanAddons")
         return c
     }
 
@@ -91,14 +94,25 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
     func webView(_ v: WKWebView, decidePolicyFor a: WKNavigationAction,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
         if a.shouldPerformDownload { return decisionHandler(.download) }
-        if a.targetFrame?.isMainFrame ?? true {
-            Rules.shared.sync(v.configuration.userContentController, topHost: a.request.url?.host())
+        if a.targetFrame?.isMainFrame ?? true, let url = a.request.url {
+            Rules.shared.sync(v.configuration.userContentController, topHost: url.host())
+            if let r = AddonHost.shared.emit("beforeNavigate", ["url": url.absoluteString, "tab": AddonHost.describe(self)]) {
+                if r["cancel"] as? Bool == true { return decisionHandler(.cancel) }
+                if let to = r["redirect"] as? String, let u = Address.resolve(to), u != url {
+                    decisionHandler(.cancel)
+                    return load(u)
+                }
+            }
         }
         if a.navigationType == .linkActivated, a.modifierFlags.contains(.command), let url = a.request.url {
             onOpen?(url, !a.modifierFlags.contains(.shift))
             return decisionHandler(.cancel)
         }
         decisionHandler(.allow)
+    }
+
+    func webView(_ v: WKWebView, didFinish n: WKNavigation!) {
+        AddonHost.shared.emit("tabLoaded", ["id": id.uuidString, "url": url?.absoluteString ?? "", "title": title])
     }
 
     // MARK: downloads

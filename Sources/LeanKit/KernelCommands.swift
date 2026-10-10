@@ -51,6 +51,10 @@ enum KernelCommands {
             w.tab.webView.reload()
         })
 
+        c.register("addons.open", "Add-ons", keys: ["cmd+shift+a"], run: win { w in
+            if let i = w.tabs.firstIndex(where: { $0.url == AddonsPage.url }) { w.select(i) } else { w.open(AddonsPage.url, background: false) }
+        })
+
         c.register("devtools.toggle", "Developer Tools", keys: ["cmd+alt+i"], run: web(Inspector.toggle))
     }
 }

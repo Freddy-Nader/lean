@@ -9,12 +9,13 @@ public enum Address {
         let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return nil }
         if let url = URL(string: input), let scheme = url.scheme?.lowercased(),
-           ["http", "https", "file", "about", "data"].contains(scheme) {
+           ["http", "https", "file", "about", "data", "lean"].contains(scheme) {
             return url
         }
         if looksLikeHost(input), let url = URL(string: (isLocal(input) ? "http://" : "https://") + input) {
             return url
         }
+        if let custom = Slots.shared.call("search", "url", [input]) as? String, let u = URL(string: custom) { return u }
         let q = input.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(["&", "+", "="])) ?? input
         return URL(string: searchTemplate.replacingOccurrences(of: "%s", with: q))
     }

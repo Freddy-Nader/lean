@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 
 
 @MainActor
@@ -12,7 +13,13 @@ public final class App: NSObject, NSApplicationDelegate {
         app.run()
     }
 
+    public private(set) static weak var shared: App?
     private(set) var windows: [BrowserWindow] = []
+
+    var allTabs: [Tab] { windows.flatMap(\.tabs) }
+    func tab(id: String) -> Tab? { allTabs.first { $0.id.uuidString == id } }
+    func tab(for webView: WKWebView) -> Tab? { allTabs.first { $0.hasWebView && $0.webView === webView } }
+    func window(containing t: Tab) -> BrowserWindow? { windows.first { $0.tabs.contains { $0 === t } } }
 
     /// The window commands act on: the key window, else the last one opened.
     var current: BrowserWindow? {
@@ -20,9 +27,12 @@ public final class App: NSObject, NSApplicationDelegate {
     }
 
     public func applicationDidFinishLaunching(_ note: Notification) {
+        Self.shared = self
         NSApp.mainMenu = Self.editMenu()
         KernelCommands.register(self)
         Commands.shared.start()
+        AddonHost.shared.onChange = { AddonsPage.shared.refresh() }
+        AddonHost.shared.start()
         newWindow(url: CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") && !$0.hasPrefix("/") }))
         NSApp.activate()
         Rules.shared.loadBundled()

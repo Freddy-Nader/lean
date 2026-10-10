@@ -23,6 +23,8 @@ public final class Settings {
         (values[key] as? String) ?? (Self.defaults[key] as? String) ?? ""
     }
 
+    public func value(_ key: String) -> Any? { values[key] ?? Self.defaults[key] }
+
     public func strings(_ key: String) -> [String] { (values[key] as? [String]) ?? [] }
 
     public func set(_ key: String, _ value: Any?) {

@@ -28,7 +28,16 @@ public final class Downloads: NSObject, WKDownloadDelegate {
 
     public func download(_ d: WKDownload, decideDestinationUsing r: URLResponse, suggestedFilename name: String,
                          completionHandler: @escaping @MainActor (URL?) -> Void) {
-        let dest = Self.unique(Settings.shared.path("downloads.folder").appending(path: name))
+        let info: [String: Any] = ["url": d.originalRequest?.url?.absoluteString ?? "", "filename": name]
+        let hook = AddonHost.shared.emit("beforeDownload", info)
+        if hook?["cancel"] as? Bool == true {
+            if let i = byDownload[ObjectIdentifier(d)] { items[i].failed = true }
+            return completionHandler(nil)
+        }
+        let custom = (hook?["path"] as? String)
+            ?? (Slots.shared.call("downloads", "destination", [info]) as? String)
+        let dest = custom.map { Self.unique(URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath)) }
+            ?? Self.unique(Settings.shared.path("downloads.folder").appending(path: name))
         if let i = byDownload[ObjectIdentifier(d)] { items[i].file = dest }
         onChange?()
         completionHandler(dest)
