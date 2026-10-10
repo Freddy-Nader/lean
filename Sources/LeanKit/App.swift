@@ -54,7 +54,7 @@ public final class App: NSObject, NSApplicationDelegate {
         w.onClose = { [weak self, weak w] in self?.windows.removeAll { $0 === w } }
         w.showWindow(nil)
         NotificationCenter.default.post(name: BrowserWindow.opened, object: w)
-        if let url { w.load(url) } else { w.focusAddress() }
+        if let url { w.load(url) }
         return w
     }
 

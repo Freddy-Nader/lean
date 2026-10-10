@@ -6,8 +6,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
     /// Posted (object: the window) whenever tabs are added, removed, moved, selected or retitled.
     static let tabsChanged = Notification.Name("lean.tabsChanged")
     static let opened = Notification.Name("lean.windowOpened")
-    /// Set by the palette add-on: ↓ in the address field opens it with the typed text.
-    static var addressDown: ((BrowserWindow, String) -> Void)?
+    /// Set by the palette add-on: opens it on this window with `text`; `newTab` makes ↵ open a new tab.
+    static var prompt: ((BrowserWindow, _ text: String, _ newTab: Bool) -> Void)?
 
     var onClose: (() -> Void)?
     private var edgeView: NSView?
@@ -17,8 +17,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
     private let content = NSView()
     private(set) var tabs: [Tab] = []
     private(set) var activeIndex = 0
-    var tab: Tab { tabs[activeIndex] }
-    private(set) lazy var find = FindBar { [unowned self] in self.tab.webView }
+    var tab: Tab? { tabs.indices.contains(activeIndex) ? tabs[activeIndex] : nil }
+    private(set) lazy var find = FindBar { [unowned self] in self.tab?.webView }
     private var findHeight: NSLayoutConstraint!
 
     init() {
@@ -33,7 +33,6 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         super.init(window: w)
         w.delegate = self
         layout(in: w.contentView!)
-        add(Tab(), select: true)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -120,6 +119,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         t.onChange = { [weak self] t in self?.refresh(t) }
         t.onOpen = { [weak self] url, background in self?.open(url, background: background, opener: t) }
         let i = tabs.isEmpty ? 0 : activeIndex + 1
+        let select = select || tabs.isEmpty
         tabs.insert(t, at: i)
         if select { self.select(i) } else if i <= activeIndex { activeIndex += 1 }
         changed()
@@ -156,7 +156,13 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         Tab.closed.append(t.url)
         AddonHost.shared.emit("tabClosed", AddonHost.describe(t) as! [String: Any])
         t.discard()
-        if tabs.isEmpty { return close() }
+        if tabs.isEmpty {
+            content.subviews.forEach { $0.removeFromSuperview() }
+            activeIndex = 0
+            address.stringValue = ""
+            window?.title = "lean"
+            return changed()
+        }
         if i < activeIndex { activeIndex -= 1 } else if i == activeIndex { select(min(i, tabs.count - 1)) }
         changed()
     }
@@ -173,6 +179,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
 
     func load(_ input: String) {
         guard let url = Address.resolve(input) else { return }
+        guard let tab else { open(url, background: false); return }
         tab.load(url)
         window?.makeFirstResponder(tab.webView)
     }
@@ -184,7 +191,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
 
     private func refresh(_ t: Tab) {
         changed()
-        guard t === tab else { return }
+        guard let tab, t === tab else { return }
         window?.title = t.title
         if address.currentEditor() == nil { address.stringValue = t.url?.absoluteString ?? "" }
     }
@@ -195,11 +202,11 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSTextFieldDele
         case #selector(NSResponder.insertNewline(_:)):
             load(address.stringValue); return true
         case #selector(NSResponder.cancelOperation(_:)):
-            address.stringValue = tab.url?.absoluteString ?? ""
-            window?.makeFirstResponder(tab.webView); return true
+            address.stringValue = tab?.url?.absoluteString ?? ""
+            window?.makeFirstResponder(tab?.webView); return true
         case #selector(NSResponder.moveDown(_:)):
-            guard let open = Self.addressDown else { return false }
-            open(self, address.stringValue == tab.url?.absoluteString ? "" : address.stringValue); return true
+            guard let prompt = Self.prompt else { return false }
+            prompt(self, address.stringValue == tab?.url?.absoluteString ? "" : address.stringValue, false); return true
         default: return false
         }
     }

@@ -125,7 +125,7 @@ final class TabStrip: SwiftAddon {
                 }
             }
             let plus = TabButton(title: "+", selected: false, loading: false, plain: true)
-            plus.onSelect = { [weak w] in w?.add(Tab(), select: true) }
+            plus.onSelect = { Commands.shared.run("tab.new") }
             stack.addArrangedSubview(plus)
             if !vertical { plus.widthAnchor.constraint(equalToConstant: 28).isActive = true }
         }

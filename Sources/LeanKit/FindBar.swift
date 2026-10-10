@@ -5,10 +5,10 @@ import WebKit
 @MainActor
 final class FindBar: NSObject, NSSearchFieldDelegate {
     let field = NSSearchField()
-    var webView: () -> WKWebView
+    var webView: () -> WKWebView?
     var onVisibility: (Bool) -> Void = { _ in }
 
-    init(webView: @escaping () -> WKWebView) {
+    init(webView: @escaping () -> WKWebView?) {
         self.webView = webView
         super.init()
         field.placeholderString = "Find in page"
@@ -37,7 +37,7 @@ final class FindBar: NSObject, NSSearchFieldDelegate {
         let c = WKFindConfiguration()
         c.backwards = backwards
         c.wraps = true
-        webView().find(field.stringValue, configuration: c) { _ in }
+        webView()?.find(field.stringValue, configuration: c) { _ in }
     }
 
     @objc private func changed() { next(backwards: false) }

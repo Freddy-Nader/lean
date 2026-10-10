@@ -41,6 +41,11 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
     private let hintLeft = NSTextField(labelWithString: "")
     private let hintRight = NSTextField(labelWithString: "Actions ⌘K")
     private var tableHeight: NSLayoutConstraint!
+    private var topNormal: NSLayoutConstraint!
+    private var topCentered: NSLayoutConstraint!
+    private var newTab = false
+    /// A window with no tabs shows the palette centred and it cannot be dismissed.
+    private var centered = false
 
     var isOpen: Bool { backdrop.superview != nil }
 
@@ -52,7 +57,11 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
             if self.isOpen { self.showActions() } else { self.open() }
         }
         Slots.shared.provideNative("palette", owner: id)
-        BrowserWindow.addressDown = { [weak self] w, text in self?.open(in: w, query: text) }
+        BrowserWindow.prompt = { [weak self] w, text, newTab in self?.open(in: w, query: text, newTab: newTab) }
+        // shortcut: one shared palette view; with two empty windows it moves to whichever changed last.
+        for n in [BrowserWindow.opened, BrowserWindow.tabsChanged] {
+            NotificationCenter.default.addObserver(self, selector: #selector(windowChanged), name: n, object: nil)
+        }
         build()
     }
 
@@ -60,14 +69,27 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         close()
         Commands.shared.unregister("palette.open")
         Slots.shared.removeNative("palette", owner: id)
-        BrowserWindow.addressDown = nil
+        BrowserWindow.prompt = nil
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    /// Empty window → palette (launch, last tab closed); palette centred on a window that now has tabs → gone.
+    @objc private func windowChanged(_ n: Notification) {
+        guard let w = n.object as? BrowserWindow else { return }
+        if w.tabs.isEmpty {
+            if !(isOpen && host === w) { open(in: w) }
+        } else if isOpen, centered, host === w { close() }
     }
 
     // MARK: open / close
 
-    func open(in w: BrowserWindow? = App.shared?.current, query: String = "") {
+    func open(in w: BrowserWindow? = App.shared?.current, query: String = "", newTab: Bool = false) {
         guard let w, let root = w.window?.contentView else { return }
         host = w
+        self.newTab = newTab
+        centered = w.tabs.isEmpty
+        topNormal.isActive = !centered
+        topCentered.isActive = centered
         stack = [rootLevel()]
         backdrop.frame = root.bounds
         backdrop.autoresizingMask = [.width, .height]
@@ -82,7 +104,7 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
     func close() {
         guard isOpen else { return }
         backdrop.removeFromSuperview()
-        if let h = host { h.window?.makeFirstResponder(h.tab.hasWebView ? h.tab.webView : nil) }
+        if let h = host { h.window?.makeFirstResponder(h.tab.flatMap { $0.hasWebView ? $0.webView : nil }) }
     }
 
     private func push(_ level: Level) {
@@ -93,7 +115,10 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
     }
 
     private func pop() {
-        guard stack.count > 1 else { return close() }
+        guard stack.count > 1 else {
+            if centered { field.stringValue = ""; reload(); return }
+            return close()
+        }
         stack.removeLast()
         field.stringValue = stack.last!.query
         reload()
@@ -206,10 +231,12 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         let url = Address.resolve(q)
         let isSearch = url == nil || (!Address.looksLikeHost(q) && !q.contains("://"))
         let w = host
+        let fresh = newTab || w?.tab == nil
+        let inTab = { if let u = url { if let t = w?.tab { t.load(u) } else { w?.open(u, background: false) } } }
+        let inNew = { if let u = url { w?.open(u, background: false) } }
         return Item(icon: isSearch ? "magnifyingglass" : "arrow.up.right", title: isSearch ? "Search the web for “\(q)”" : "Open \(q)",
-                    subtitle: url?.host() ?? "", accessory: "⌘↵ new tab", key: "web", primary: isSearch ? "Search" : "Open",
-                    run: { if let u = url { w?.tab.load(u) } },
-                    alt: { if let u = url { w?.open(u, background: false) } })
+                    subtitle: url?.host() ?? "", accessory: fresh ? "⌘↵ this tab" : "⌘↵ new tab", key: "web", primary: isSearch ? "Search" : "Open",
+                    run: fresh ? inNew : inTab, alt: fresh ? inTab : inNew)
     }
 
     // MARK: table
@@ -264,6 +291,8 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         if let p = item.push { return push(p()) }
         close()
         if alt, let a = item.alt { a() } else { item.run() }
+        // A command that opened no tab must not leave an empty window with nothing in it.
+        if let h = host, h.tabs.isEmpty, !isOpen { open(in: h) }
     }
 
     func numberOfRows(in t: NSTableView) -> Int { rows.count }
@@ -324,7 +353,7 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         box.layer?.cornerRadius = 12
         box.layer?.masksToBounds = true
         box.translatesAutoresizingMaskIntoConstraints = false
-        backdrop.onClick = { [weak self] in self?.close() }
+        backdrop.onClick = { [weak self] in if self?.centered == false { self?.close() } }
         backdrop.addSubview(box)
 
         field.isBordered = false
@@ -358,9 +387,10 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
             box.addSubview(v)
         }
         tableHeight = scroll.heightAnchor.constraint(equalToConstant: 200)
+        topNormal = box.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 72)
+        topCentered = box.topAnchor.constraint(equalTo: backdrop.centerYAnchor, constant: -60)
         NSLayoutConstraint.activate([
             box.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
-            box.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 72),
             box.widthAnchor.constraint(equalToConstant: 640),
             box.widthAnchor.constraint(lessThanOrEqualTo: backdrop.widthAnchor, constant: -32),
             field.topAnchor.constraint(equalTo: box.topAnchor, constant: 12),

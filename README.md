@@ -35,6 +35,7 @@ open --env LEAN_DEV=1 build/lean.app
 build/lean.app/Contents/MacOS/lean --run page.reload       # run any command id
 build/lean.app/Contents/MacOS/lean --run load github.com   # load an address
 cat ~/.config/lean/dev-state.json                          # windows, tabs, commands + keys
+build/lean.app/Contents/MacOS/lean --run snapshot /tmp/s.png   # PNG of the window's view tree (glass may render flat)
 ```
 
 ## Settings

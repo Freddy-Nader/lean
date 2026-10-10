@@ -27,8 +27,9 @@ enum Dev {
                 if id == "load", parts.count > 1 { app.current?.load(parts[1]) }
                 else if id == "key", parts.count > 1 { press(parts[1]) }
                 else if id == "type", parts.count > 1 { parts[1].forEach { press(String($0)) } }
-                else if id == "eval", parts.count > 1, let w = app.current {
-                    w.tab.webView.evaluateJavaScript(parts[1]) { r, e in
+                else if id == "snapshot", parts.count > 1 { snapshot(app, parts[1]) }
+                else if id == "eval", parts.count > 1, let t = app.current?.tab {
+                    t.webView.evaluateJavaScript(parts[1]) { r, e in
                         MainActor.assumeIsolated { lastEval = "\(r ?? e?.localizedDescription ?? "nil")"; dump(app) }
                     }
                 } else { Commands.shared.run(id) }
@@ -36,6 +37,13 @@ enum Dev {
             }
         }
         dump(app)
+    }
+
+    /// Renders the current window's view tree to a PNG (glass and web content may come out flat).
+    static func snapshot(_ app: App, _ path: String) {
+        guard let v = app.current?.window?.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
+        v.cacheDisplay(in: v.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
     }
 
     /// Synthesizes a real key event ("return", "down", "cmd+k", "a") through NSApp.sendEvent, so it

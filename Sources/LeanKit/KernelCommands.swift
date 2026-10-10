@@ -10,14 +10,18 @@ enum KernelCommands {
             { if let w = app.current { f(w) } }
         }
         func web(_ f: @escaping (WKWebView) -> Void) -> () -> Void {
-            win { f($0.tab.webView) }
+            win { if let t = $0.tab { f(t.webView) } }
         }
 
         c.register("window.new", "New Window", keys: ["cmd+n"]) { app.newWindow() }
         c.register("window.close", "Close Window", keys: ["cmd+shift+w"], run: win { $0.close() })
 
-        c.register("tab.new", "New Tab", keys: ["cmd+t"], run: win { $0.add(Tab(), select: true) })
-        c.register("tab.close", "Close Tab", keys: ["cmd+w"], run: win { $0.close(at: $0.activeIndex) })
+        c.register("tab.new", "New Tab", keys: ["cmd+t"], run: win { w in
+            if let p = BrowserWindow.prompt { p(w, "", true) } else { w.add(Tab(), select: true) }
+        })
+        c.register("tab.close", "Close Tab", keys: ["cmd+w"], run: win { w in
+            if w.tabs.isEmpty { w.close() } else { w.close(at: w.activeIndex) }
+        })
         c.register("tab.reopen", "Reopen Closed Tab", keys: ["cmd+shift+t"], run: win { w in
             guard let last = Tab.closed.popLast() else { return }
             w.add(Tab(url: last), select: true)
@@ -47,8 +51,9 @@ enum KernelCommands {
         c.register("find.previous", "Find Previous", keys: ["cmd+shift+g"], run: win { $0.find.next(backwards: true) })
 
         c.register("rules.togglePause", "Pause Blocking on This Site", run: win { w in
-            Rules.shared.togglePause(w.tab.url?.host())
-            w.tab.webView.reload()
+            guard let t = w.tab else { return }
+            Rules.shared.togglePause(t.url?.host())
+            t.webView.reload()
         })
 
         c.register("addons.open", "Add-ons", keys: ["cmd+shift+a"], run: win { w in
