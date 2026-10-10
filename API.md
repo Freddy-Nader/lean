@@ -1,122 +1,142 @@
-# lean add-on API (draft)
+# lean add-on API
 
-The only contract add-ons, and the AI writing them, rely on. Anything not here does not exist.
+The contract add-ons (and the AI writing them) rely on. Anything not here does not exist.
+Check a file with `lean --check <file.js>` before using it.
 
 ## Where add-ons live
 
-- `~/.config/lean/addons/<id>.js` — yours. The file name is the id. Loads on save (hot reload).
-- Shipped: `addons/default/` (on unless disabled) and `addons/optional/` (off unless enabled). A file in
-  your folder with the same id overrides the shipped one: copy it there to fork it.
-- `lean://addons` (⌘⇧A) lists every add-on with its switch, commands, last error and log.
-- Storage lives in `~/.config/lean/addons/.<id>.data.json`.
+- `~/.config/lean/addons/<id>.js`: yours. The file name is the id (lowercase-with-hyphens). Saving the
+  file reloads it in the running browser (hot reload); tabs stay open.
+- Shipped with the app: `addons/default/` (on unless disabled) and `addons/optional/` (off unless
+  enabled). A file in your folder with the same id overrides the shipped one: copy it there to fork it.
+- `lean://addons` (⌘⇧A, or "Add-ons" in the palette) lists every add-on with its switch, commands,
+  last error and log, and which add-on provides each slot.
+- Storage: `~/.config/lean/addons/.<id>.data.json`.
+- Errors never crash the browser: a throw (sync or async, host or page) disables that add-on and shows
+  the error on the add-ons page. Fix the file and save; it reloads.
 
-## JS add-on shape
+## Shape of a JS add-on
 
 ```js
 // ~/.config/lean/addons/reader.js
 export default {
-  id: "reader",
-  name: "Reader mode",
+  name: "Reader",
   description: "Strip a page down to its article text.",
 
   commands: {
-    "reader.toggle": {
-      title: "Toggle reader mode",
-      key: "cmd+shift+r",          // default; keys.json can override
-      run: async ({ tabs }) => tabs.active().send("toggle"),
+    "reader.toggle": {                    // ids start with the add-on id
+      title: "Toggle Reader Mode",        // shown in the palette
+      key: "cmd+shift+r",                 // default; keys.json can override
+      run: ({ tabs }) => tabs.active().send("toggle"),
     },
   },
 
-  // runs in the host JSContext; every hook also gets the context as its second argument
-  setup(ctx) {},                 // once, after load (and after every hot reload)
+  setup(ctx) {},                 // after every load (launch and hot reload)
   onReady(_, ctx) {},            // once per launch, after the first window opens
-  onTabLoad(tab, ctx) {},
-  onTabCreated(tab) {},
-  onTabClosed(tab) {},
 
-  // injected into matching pages, in an isolated content world
+  // hooks: (payload, ctx)
+  onTabCreated(tab, ctx) {},
+  onTabLoad(tab, ctx) {},        // tab = { id, url, title }
+  onTabClosed(tab, ctx) {},
+  onMessage({ tab, event, data }, ctx) {},       // from this add-on's page code
+  beforeNavigate({ url, tab }, ctx) {},          // return { cancel: true } or { redirect: url }
+  beforeDownload({ url, filename }, ctx) {},     // return { cancel: true } or { path: "~/…" }
+  onImport({ kind, items }, ctx) {},             // from the import add-on: kind "history" | "bookmarks"
+
+  // injected into matching pages, in this add-on's own isolated world
   page: {
-    match: ["*://*/*"],
-    runAt: "end",                  // "start" | "end"
-    run({ on }) {
+    match: ["*://*/*"],          // Chrome-style match patterns; "<all_urls>" works too
+    runAt: "end",                // "start" (before the page's scripts) | "end"
+    run({ on, emit, data }) {
       on("toggle", () => document.body.classList.toggle("lean-reader"));
     },
   },
 };
 ```
 
-## Host API (`ctx`, passed to `run` and handlers)
+## Context (`ctx`), passed to `run`, `setup` and every hook
 
 | Namespace | Calls |
 |---|---|
-| `tabs` | `active()`, `list()`, `open(url, {background})`, `close(id)`, `focus(id)`, `onCreated/onLoad/onClosed(fn)` |
-| `tab` (object) | `id`, `url`, `title`, `eval(fn, ...args)`, `send(event, data)`, `reload()`, `navigate(url)` |
-| `keys` | `bind(key, commandId)`, `unbind(key)` |
-| `palette` | `addGroup(name, provider)` where `provider(query)` returns `[{title, subtitle, icon, run}]` |
-| `ui` | `toast(text)`, `panel(html, {side})`, `closePanel()` |
-| `storage` | `get(key)`, `set(key, value)`, `all()` — per add-on JSON file |
-| `net` | `fetch(url, opts)` |
-| `rules` | `add(contentRuleListJSON)`, `remove(id)` — extra blocking rules |
-| `settings` | `get(key)` — values declared in the add-on's `settings` field |
-| `slots` | `provide(name, impl)` — replace a kernel subsystem (`downloads`, `history`, `palette`, `tabstrip`, `newtab`, `suggest`, `search`, `session`) |
-| `decide` | `choice(state, options)`, `score(state, rubric)`, `bool(state, question)` → result + `confidence`; pass `{rules, threshold}` |
-| `hooks` | `on(name, fn)` — `beforeNavigate({url, tab})` may return `{cancel: true}` or `{redirect: url}`; `beforeDownload({url, filename})` may return `{cancel: true}` or `{path}`; `tabCreated`, `tabLoaded`, `tabClosed`, `message` are observe-only |
+| `tabs` | `active()`, `list()`, `open(url, { background })`, `close(id)`, `focus(id)`, `onCreated/onLoad/onClosed(fn)` |
+| tab object | `id`, `url`, `title`, `eval(fn, ...args)` → Promise, `send(event, data)`, `reload()`, `navigate(url)`, `close()`, `focus()` |
+| `keys` | `bind(key, commandId)`, `unbind(key)` (runtime; keys.json still wins) |
+| `palette` | `addGroup(name, (query) => [{ title, subtitle, run }])` |
+| `ui` | `toast(text)`, `copy(text)`, `open(pathOrUrl, { reveal })` |
+| `storage` | `get(key)`, `set(key, value)`, `all()` (JSON values, per add-on) |
+| `settings` | `get(key)` (e.g. `downloads.folder`, `search.template`) |
+| `net` | `fetch(url, { method, headers, body })` → `{ status, ok, text(), json() }` |
+| `rules` | `add(id, contentBlockerJSON)`, `remove(id)`, `bundled()` (the shipped EasyList lists) |
+| `rank` | `match(query, text)`, `score(query, text, key)`, `pick(key)`, `forget(key)` (the kernel's frecency ranking) |
+| `downloads` | `list()` → `[{ url, path, done, failed }]`, newest first |
+| `page` | `setData(obj)`: becomes `data` in this add-on's page code on the next page loads |
+| `slots` | `provide(name, impl)`: replace a kernel subsystem (below) |
+| `hooks` | `on(name, fn)`: same hooks as the `on…` fields |
+| `app` | `justLaunched` (true in the first seconds after launch) |
 
-## Replacing a subsystem
+Host globals: `console.log/error` (shown in the add-ons page log), `setTimeout`, `URL`,
+`URLSearchParams` (absolute URLs), and standard JavaScript. There is no DOM and no `fetch` in the
+host: use page code for the DOM and `ctx.net.fetch` for the network.
+
+## Page code
+
+`page.run({ on, emit, data })` runs in every matching page, in an isolated world: it sees and changes
+the page's DOM but not the page's JavaScript variables, and no other add-on can see it.
+
+- `on(event, fn)`: receive `tab.send(event, data)` from the host.
+- `emit(event, data)`: send to the host; arrives as `onMessage({ tab, event, data })`.
+- `data`: whatever the host last passed to `ctx.page.setData()`.
+
+## Slots: replacing a subsystem
+
+| Slot | Default | JS provider shape |
+|---|---|---|
+| `search` | Google, or the `search.template` setting | `{ url(query) → string }` |
+| `downloads` | `downloads.folder` setting | `{ destination({ url, filename }) → path }` |
+| `palette`, `tabstrip` | Swift add-ons | native only |
+| `history`, `session`, `newtab`, `suggest` | reserved | — |
 
 ```js
-// downloads go to a dated folder
-export default {
-  name: "Dated downloads",
-  beforeDownload({ filename }) {
-    return { path: `~/Downloads/${new Date().toISOString().slice(0, 10)}/${filename}` };
-  },
-};
-
-// a different search engine, by providing the `search` slot
+// DuckDuckGo instead of Google
 export default {
   name: "DuckDuckGo",
   setup({ slots }) {
     slots.provide("search", { url: (q) => "https://duckduckgo.com/?q=" + encodeURIComponent(q) });
   },
 };
+
+// downloads into a dated folder
+export default {
+  name: "Dated Downloads",
+  beforeDownload({ filename }) {
+    return { path: `~/Downloads/${new Date().toISOString().slice(0, 10)}/${filename}` };
+  },
+};
 ```
 
-Shipped add-ons in `addons/default/` and `addons/optional/` are the reference: copy one to change a default.
+## Swift add-ons
 
-## Page API (`page.run` argument)
-
-- `on(event, fn)`: receive `tab.send(event, data)` from the host.
-- `emit(event, data)`: send to the host; arrives as `onMessage({ tab, event, data })`.
-
-Page code runs in the add-on's own isolated world: it sees the page's DOM, not the page's JavaScript
-variables, and other add-ons cannot see it.
-
-## Globals in the host context
-
-`console.log` (shown in the add-ons page log), `setTimeout`, and standard JavaScript. No `fetch`:
-use `ctx.net.fetch`.
-
-## Swift add-on shape
+For what JavaScript cannot do: native UI, files, Keychain, SQLite. One file in
+`Sources/LeanKit/Builtin/`, a class conforming to `SwiftAddon`, listed in `SwiftAddons.all`; needs
+`./build.sh`. Examples: `Palette.swift`, `TabStrip.swift`, `BrowserImport.swift`.
 
 ```swift
-// Sources/Addons/Indexer.swift
-struct Indexer: Addon {
-    let id = "indexer"
-    let commands: [Command] = [
-        Command("indexer.search", title: "Search local files", key: "cmd+shift+f") { ctx in
-            // native work here
-        }
-    ]
-    func onTabLoad(_ tab: Tab, ctx: Context) {}
+@MainActor
+final class Indexer: SwiftAddon {
+    let id = "indexer", name = "Indexer", kind = JSAddon.Kind.optional
+    let summary = "Search local files from the palette."
+    func load() throws {
+        Commands.shared.register("indexer.search", "Search Local Files", keys: ["cmd+shift+f"], owner: id) { /* … */ }
+    }
+    func unload() {}
 }
 ```
 
-The same `Context` namespaces as JS, in Swift form. Register in `Addons.all`.
-
 ## Rules for add-on authors
 
-- One file per add-on. No imports between add-ons.
-- Never touch the core's files.
+- One file per add-on. No imports between add-ons; talk through hooks and slots.
+- Never edit kernel files (`Sources/LeanKit/*.swift` outside `Builtin/`) to make an add-on work. If the
+  API is missing something, say so; that is a kernel change for the maintainer to decide.
 - Command ids are `<addon-id>.<verb>`.
-- Throwing is fine: the host disables the add-on and shows the error. It never crashes the browser.
+- Debounce writes (`setTimeout`) when reacting to frequent hooks like `onTabLoad`.
+- Run `lean --check <file>` before saying an add-on is done.
