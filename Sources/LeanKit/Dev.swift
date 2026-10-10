@@ -39,7 +39,8 @@ enum Dev {
             ] as [String: Any]
         }
         let keys = Dictionary(uniqueKeysWithValues: Commands.shared.all.keys.map { ($0, Commands.shared.key(for: $0) ?? "") })
-        let state: [String: Any] = ["windows": windows, "commands": keys]
+        let downloads = Downloads.shared.items.map { ["file": $0.file?.path ?? "", "done": $0.done, "failed": $0.failed] as [String: Any] }
+        let state: [String: Any] = ["windows": windows, "commands": keys, "downloads": downloads]
         if let d = try? JSONSerialization.data(withJSONObject: state, options: [.prettyPrinted, .sortedKeys]) {
             try? d.write(to: stateFile)
         }

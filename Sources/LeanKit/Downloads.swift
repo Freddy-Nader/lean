@@ -1,0 +1,66 @@
+import AppKit
+import WebKit
+
+/// Saves downloads to the `downloads.folder` setting (default ~/Downloads). The panel that lists
+/// them is an add-on; the kernel only saves files and reports progress.
+@MainActor
+public final class Downloads: NSObject, WKDownloadDelegate {
+    public static let shared = Downloads()
+
+    public struct Item {
+        public let id = UUID()
+        public let source: URL?
+        public var file: URL?
+        public var done = false
+        public var failed = false
+    }
+
+    public private(set) var items: [Item] = []
+    private var byDownload: [ObjectIdentifier: Int] = [:]
+    public var onChange: (() -> Void)?
+
+    func track(_ d: WKDownload) {
+        d.delegate = self
+        byDownload[ObjectIdentifier(d)] = items.count
+        items.append(Item(source: d.originalRequest?.url))
+        onChange?()
+    }
+
+    public func download(_ d: WKDownload, decideDestinationUsing r: URLResponse, suggestedFilename name: String,
+                         completionHandler: @escaping @MainActor (URL?) -> Void) {
+        let dest = Self.unique(Settings.shared.path("downloads.folder").appending(path: name))
+        if let i = byDownload[ObjectIdentifier(d)] { items[i].file = dest }
+        onChange?()
+        completionHandler(dest)
+    }
+
+    public func downloadDidFinish(_ d: WKDownload) {
+        guard let i = byDownload.removeValue(forKey: ObjectIdentifier(d)) else { return }
+        items[i].done = true
+        if let f = items[i].file {
+            // Bounces the Dock's Downloads stack, like Safari.
+            DistributedNotificationCenter.default().post(name: .init("com.apple.DownloadFileFinished"), object: f.path)
+        }
+        onChange?()
+    }
+
+    public func download(_ d: WKDownload, didFailWithError e: Error, resumeData: Data?) {
+        guard let i = byDownload.removeValue(forKey: ObjectIdentifier(d)) else { return }
+        items[i].failed = true
+        onChange?()
+    }
+
+    /// "file.pdf" → "file 2.pdf" when taken.
+    static func unique(_ url: URL) -> URL {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard fm.fileExists(atPath: url.path) else { return url }
+        let base = url.deletingPathExtension().lastPathComponent, ext = url.pathExtension
+        for n in 2... {
+            let name = ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)"
+            let candidate = url.deletingLastPathComponent().appending(path: name)
+            if !fm.fileExists(atPath: candidate.path) { return candidate }
+        }
+        return url
+    }
+}

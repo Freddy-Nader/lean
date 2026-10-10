@@ -82,12 +82,25 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
 
     func webView(_ v: WKWebView, decidePolicyFor a: WKNavigationAction,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+        if a.shouldPerformDownload { return decisionHandler(.download) }
         if a.navigationType == .linkActivated, a.modifierFlags.contains(.command), let url = a.request.url {
             onOpen?(url, !a.modifierFlags.contains(.shift))
             return decisionHandler(.cancel)
         }
         decisionHandler(.allow)
     }
+
+    // MARK: downloads
+
+    func webView(_ v: WKWebView, decidePolicyFor r: WKNavigationResponse,
+                 decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
+        let attachment = (r.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")?.lowercased().hasPrefix("attachment") ?? false
+        decisionHandler(r.canShowMIMEType && !attachment ? .allow : .download)
+    }
+
+    func webView(_ v: WKWebView, navigationAction a: WKNavigationAction, didBecome d: WKDownload) { Downloads.shared.track(d) }
+    func webView(_ v: WKWebView, navigationResponse r: WKNavigationResponse, didBecome d: WKDownload) { Downloads.shared.track(d) }
 
     // Safari's UA, so sites serve the same pages they serve Safari.
     static let userAgent: String = {

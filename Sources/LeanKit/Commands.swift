@@ -82,7 +82,7 @@ public final class Commands {
         let fd = open(Self.configDir.path, O_EVTONLY)
         guard fd >= 0 else { return }
         let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename], queue: .main)
-        src.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.loadUserKeys() } }
+        src.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.loadUserKeys(); Settings.shared.reload() } }
         src.setCancelHandler { close(fd) }
         src.resume()
         watcher = src

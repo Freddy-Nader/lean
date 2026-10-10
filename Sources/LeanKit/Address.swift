@@ -3,7 +3,7 @@ import Foundation
 /// Turns address-bar input into a URL: a URL as typed, a bare domain, or a web search.
 @MainActor
 public enum Address {
-    static var searchTemplate = "https://www.google.com/search?q=%s"
+    static var searchTemplate: String { Settings.shared.string("search.template") }
 
     public static func resolve(_ raw: String) -> URL? {
         let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)

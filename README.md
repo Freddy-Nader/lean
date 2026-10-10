@@ -36,3 +36,11 @@ build/lean.app/Contents/MacOS/lean --run page.reload       # run any command id
 build/lean.app/Contents/MacOS/lean --run load github.com   # load an address
 cat ~/.config/lean/dev-state.json                          # windows, tabs, commands + keys
 ```
+
+## Settings
+
+`~/.config/lean/settings.json` (reloads on save). Defaults:
+
+```json
+{ "downloads.folder": "~/Downloads", "search.template": "https://www.google.com/search?q=%s" }
+```
