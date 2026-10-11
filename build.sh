@@ -9,6 +9,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp ".build/$CONFIG/Lean" "$APP/Contents/MacOS/lean"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+plutil -replace LeanCommit -string "${LEAN_COMMIT:-dev}" "$APP/Contents/Info.plist"   # CI sets it; "dev" builds never self-update
 [ -d Resources/rules ] || python3 -I scripts/rules.py Resources/rules
 cp -Rp Resources/rules "$APP/Contents/Resources/"   # -p keeps mtimes, so WebKit's compiled-list cache stays valid
 [ -d addons ] && cp -R addons "$APP/Contents/Resources/"

@@ -177,6 +177,15 @@ Exploration track, not v1. Any model feature is an optional add-on so the bare b
 
 ⌥N, like Comet. First switches the page to dark appearance so sites with a real dark mode use it; if the page stays light, applies a CSS inversion that re-inverts images and video. Remembered per site, plus a global "dark everywhere" setting. Injected at document start so there is no white flash.
 
+## Default add-on: updater (Swift)
+
+GitHub commits are the updates. CI builds each push to main and publishes the rolling release `latest`: `manifest.json` (commit, SHA-256 of the binary and of every add-on file), the binary, and the add-on files. Every 6 h and on `update.check` the app fetches the manifest and downloads only what differs, verifying every hash before touching disk.
+
+- Add-on files land in `~/.config/lean/updates/`, loaded after the bundled ones and before the user's own, and hot-reload. The overlay counts only while its recorded base commit equals the app's `LeanCommit`, so a reinstall or a local build ignores stale files.
+- A new binary is renamed over `Contents/MacOS/lean` (the running process keeps its copy), the bundle is re-signed ad hoc, and it takes effect at the next launch or `update.restart`. The old binary stays in `updates/lean.prev`.
+- Switch: the add-on's own switch on lean://addons. Local builds (`LeanCommit` = `dev`) never update.
+- Limits: arm64 only (the CI runner's architecture); a file deleted from the repo stays in the bundle; EasyList is not updated; trust is the repo owner's GitHub account (no manifest signature yet).
+
 ## Optional add-on: import from other browsers (Swift)
 
 Supported sources: Chromium browsers (Arc, Brave, Chrome, Comet, Dia, Edge, Vivaldi; same file formats) and Safari.

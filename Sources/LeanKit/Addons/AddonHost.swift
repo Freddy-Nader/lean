@@ -8,6 +8,7 @@ import WebKit
 /// folder forks it):
 ///   app bundle  addons/default/*.js    on unless disabled
 ///   app bundle  addons/optional/*.js   off unless enabled
+///   auto-updated copies of the two above (~/.config/lean/updates/addons/, see Updater)
 ///   ~/.config/lean/addons/*.js         on unless disabled
 @MainActor
 public final class AddonHost: NSObject, WKScriptMessageHandler {
@@ -32,9 +33,12 @@ public final class AddonHost: NSObject, WKScriptMessageHandler {
     private func discover() -> [String: (URL, JSAddon.Kind)] {
         var found: [String: (URL, JSAddon.Kind)] = [:]
         let bundled = Bundle.main.resourceURL?.appending(path: "addons")
+        let updated = Updater.overlay()?.appending(path: "addons")
         let sources: [(URL?, JSAddon.Kind)] = [
             (bundled?.appending(path: "default"), .default),
             (bundled?.appending(path: "optional"), .optional),
+            (updated?.appending(path: "default"), .default),
+            (updated?.appending(path: "optional"), .optional),
             (Self.userDir, .user),
         ]
         for (dir, kind) in sources {

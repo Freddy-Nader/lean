@@ -41,6 +41,28 @@ build/lean.app/Contents/MacOS/lean --run click 300 16       # click at x y (poin
 build/lean.app/Contents/MacOS/lean --run snapshot /tmp/s.png   # PNG of the window's view tree (glass may render flat)
 ```
 
+## Auto-update
+
+A default add-on (`updater`; switch it off on lean://addons). It follows GitHub: every push to
+main is built by CI (.github/workflows/release.yml) and published as the rolling release `latest`
+with a manifest of hashes. Every 6 hours (and on "Check for Updates" in the palette) lean
+downloads only what differs:
+
+- changed add-on files go to ~/.config/lean/updates/ and hot-reload, no restart;
+- a changed binary replaces Contents/MacOS/lean, the app is re-signed ad hoc, and the new
+  build runs at the next launch ("Restart to Finish Update" in the palette does it now).
+  The previous binary is kept at ~/.config/lean/updates/lean.prev.
+
+Local builds (`./build.sh`) are stamped "dev" and never update themselves. Only builds made by CI
+(or with `LEAN_COMMIT=<sha> ./build.sh`) do. To get a self-updating install, once:
+
+    curl -L https://github.com/Freddy-Nader/lean/releases/download/latest/lean.app.zip -o /tmp/lean.zip
+    ditto -x -k /tmp/lean.zip ~/Applications
+
+(curl adds no quarantine flag, so Gatekeeper stays quiet.) Rules lists (EasyList) are not part of
+updates; they ship in the app. Test it without GitHub: `python3 scripts/manifest.py build/lean.app dist`,
+serve `dist/` with `python3 -m http.server`, and launch with `LEAN_UPDATE_URL=http://127.0.0.1:8000`.
+
 ## Settings
 
 `~/.config/lean/settings.json` (reloads on save). Defaults:
