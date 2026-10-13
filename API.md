@@ -9,7 +9,7 @@ Check a file with `lean --check <file.js>` before using it.
   file reloads it in the running browser (hot reload); tabs stay open.
 - Shipped with the app: `addons/default/` (on unless disabled) and `addons/optional/` (off unless
   enabled). A file in your folder with the same id overrides the shipped one: copy it there to fork it.
-- `lean://addons` (⌘⇧A, or "Add-ons" in the palette) lists every add-on with its switch, commands,
+- `lean://settings` (⌘, ; ⌘⇧A jumps to its add-ons section) shows the general settings and lists every add-on with its switch, commands,
   last error and log, and which add-on provides each slot.
 - Storage: `~/.config/lean/addons/.<id>.data.json`.
 - Errors never crash the browser: a throw (sync or async, host or page) disables that add-on and shows
@@ -61,10 +61,10 @@ export default {
 | `tabs` | `active()`, `list()`, `open(url, { background })`, `close(id)`, `focus(id)`, `onCreated/onLoad/onClosed(fn)` |
 | tab object | `id`, `url`, `title`, `eval(fn, ...args)` → Promise, `send(event, data)`, `reload()`, `navigate(url)`, `close()`, `focus()` |
 | `keys` | `bind(key, commandId)`, `unbind(key)` (runtime; keys.json still wins) |
-| `palette` | `addGroup(name, (query) => [{ title, subtitle, run }])` |
+| `palette` | `addGroup(name, (query) => [{ title, subtitle, url, run }])`; rows with a `url` open like typed addresses (new tab after ⌘T, ⌘↵ the other way), and `run` still runs first |
 | `ui` | `toast(text)`, `copy(text)`, `open(pathOrUrl, { reveal })` |
 | `storage` | `get(key)`, `set(key, value)`, `all()` (JSON values, per add-on) |
-| `settings` | `get(key)` (e.g. `downloads.folder`, `search.template`) |
+| `settings` | `get(key)` (e.g. `downloads.folder`, `search.template`), `set(key, value)`, `declare(key, { title, options })` (options: strings or `{label, value}`). Declare a setting so it shows in Settings and the palette. |
 | `net` | `fetch(url, { method, headers, body })` → `{ status, ok, text(), json() }` |
 | `rules` | `add(id, contentBlockerJSON)`, `remove(id)`, `bundled()` (the shipped EasyList lists) |
 | `rank` | `match(query, text)`, `score(query, text, key)`, `pick(key)`, `forget(key)` (the kernel's frecency ranking) |

@@ -36,7 +36,10 @@ public final class App: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = Self.editMenu()
         KernelCommands.register(self)
         Commands.shared.start()
-        AddonHost.shared.onChange = { AddonsPage.shared.refresh() }
+        AddonHost.shared.onChange = { SettingsPage.shared.refresh() }
+        NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { SettingsPage.shared.refresh() }
+        }
         AddonHost.shared.start()
         newWindow(url: CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") && !$0.hasPrefix("/") }))
         NSApp.activate()
@@ -53,8 +56,8 @@ public final class App: NSObject, NSApplicationDelegate {
         windows.append(w)
         w.onClose = { [weak self, weak w] in self?.windows.removeAll { $0 === w } }
         w.showWindow(nil)
+        if let url { w.load(url) }   // before `opened`, so an empty-window palette does not flash
         NotificationCenter.default.post(name: BrowserWindow.opened, object: w)
-        if let url { w.load(url) } else { w.focusAddress() }
         return w
     }
 

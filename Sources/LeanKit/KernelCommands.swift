@@ -6,18 +6,23 @@ import WebKit
 enum KernelCommands {
     static func register(_ app: App) {
         let c = Commands.shared
+        Settings.shared.declareKernel()
         func win(_ f: @escaping (BrowserWindow) -> Void) -> () -> Void {
             { if let w = app.current { f(w) } }
         }
         func web(_ f: @escaping (WKWebView) -> Void) -> () -> Void {
-            win { f($0.tab.webView) }
+            win { if let t = $0.tab { f(t.webView) } }
         }
 
         c.register("window.new", "New Window", keys: ["cmd+n"]) { app.newWindow() }
         c.register("window.close", "Close Window", keys: ["cmd+shift+w"], run: win { $0.close() })
 
-        c.register("tab.new", "New Tab", keys: ["cmd+t"], run: win { $0.add(Tab(), select: true) })
-        c.register("tab.close", "Close Tab", keys: ["cmd+w"], run: win { $0.close(at: $0.activeIndex) })
+        c.register("tab.new", "New Tab", keys: ["cmd+t"], run: win { w in
+            if let p = BrowserWindow.prompt { p(w, "", true) } else { w.add(Tab(), select: true) }
+        })
+        c.register("tab.close", "Close Tab", keys: ["cmd+w"], run: win { w in
+            if w.tabs.isEmpty { w.close() } else { w.close(at: w.activeIndex) }
+        })
         c.register("tab.reopen", "Reopen Closed Tab", keys: ["cmd+shift+t"], run: win { w in
             guard let last = Tab.closed.popLast() else { return }
             w.add(Tab(url: last), select: true)
@@ -31,7 +36,7 @@ enum KernelCommands {
         }
         c.register("tab.selectLast", "Go to Last Tab", keys: ["cmd+9"], run: win { $0.select($0.tabs.count - 1) })
 
-        c.register("address.focus", "Focus Address Bar", keys: ["cmd+l"], run: win { $0.focusAddress() })
+        c.register("address.focus", "Edit Address", keys: ["cmd+l"], run: win { $0.focusAddress() })
 
         c.register("page.reload", "Reload Page", keys: ["cmd+r"], run: web { $0.reload() })
         c.register("page.reloadHard", "Reload Ignoring Cache", keys: ["cmd+shift+r"], run: web { $0.reloadFromOrigin() })
@@ -47,12 +52,25 @@ enum KernelCommands {
         c.register("find.previous", "Find Previous", keys: ["cmd+shift+g"], run: win { $0.find.next(backwards: true) })
 
         c.register("rules.togglePause", "Pause Blocking on This Site", run: win { w in
-            Rules.shared.togglePause(w.tab.url?.host())
-            w.tab.webView.reload()
+            guard let t = w.tab else { return }
+            Rules.shared.togglePause(t.url?.host())
+            t.webView.reload()
         })
 
-        c.register("addons.open", "Add-ons", keys: ["cmd+shift+a"], run: win { w in
-            if let i = w.tabs.firstIndex(where: { $0.url == AddonsPage.url }) { w.select(i) } else { w.open(AddonsPage.url, background: false) }
+        /// Selects an open lean:// tab (pointing it at `url`), else opens `url` in a new tab.
+        func page(_ url: URL) -> () -> Void {
+            win { w in
+                if let i = w.tabs.firstIndex(where: { $0.url?.scheme == "lean" }) {
+                    w.select(i)
+                    if w.tabs[i].url != url { w.tabs[i].load(url) }
+                } else { w.open(url, background: false) }
+            }
+        }
+        c.register("settings.open", "Settings", keys: ["cmd+,"], run: page(SettingsPage.url))
+        c.register("addons.open", "Add-ons", keys: ["cmd+shift+a"], run: page(URL(string: "lean://settings#addons")!))
+        c.register("keys.edit", "Edit Keybindings", run: {
+            if !FileManager.default.fileExists(atPath: Commands.keysFile.path) { try? "{\n}\n".write(to: Commands.keysFile, atomically: true, encoding: .utf8) }
+            NSWorkspace.shared.open(Commands.keysFile)
         })
 
         c.register("devtools.toggle", "Developer Tools", keys: ["cmd+alt+i"], run: web(Inspector.toggle))

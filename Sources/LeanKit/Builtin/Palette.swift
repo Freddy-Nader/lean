@@ -34,13 +34,19 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
     private var stack: [Level] = []
     private weak var host: BrowserWindow?
     private let backdrop = Backdrop()
-    private let box = NSVisualEffectView()
+    private let glass = Glass.make(cornerRadius: 16)
+    private var box: NSView { glass.view }
     private let field = NSTextField()
     private let table = NSTableView()
     private let scroll = NSScrollView()
     private let hintLeft = NSTextField(labelWithString: "")
     private let hintRight = NSTextField(labelWithString: "Actions ⌘K")
     private var tableHeight: NSLayoutConstraint!
+    private var topNormal: NSLayoutConstraint!
+    private var topCentered: NSLayoutConstraint!
+    private var newTab = false
+    /// A window with no tabs shows the palette centred and it cannot be dismissed.
+    private var centered = false
 
     var isOpen: Bool { backdrop.superview != nil }
 
@@ -52,7 +58,11 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
             if self.isOpen { self.showActions() } else { self.open() }
         }
         Slots.shared.provideNative("palette", owner: id)
-        BrowserWindow.addressDown = { [weak self] w, text in self?.open(in: w, query: text) }
+        BrowserWindow.prompt = { [weak self] w, text, newTab in self?.open(in: w, query: text, newTab: newTab) }
+        // shortcut: one shared palette view; with two empty windows it moves to whichever changed last.
+        for n in [BrowserWindow.opened, BrowserWindow.tabsChanged] {
+            NotificationCenter.default.addObserver(self, selector: #selector(windowChanged), name: n, object: nil)
+        }
         build()
     }
 
@@ -60,14 +70,27 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         close()
         Commands.shared.unregister("palette.open")
         Slots.shared.removeNative("palette", owner: id)
-        BrowserWindow.addressDown = nil
+        BrowserWindow.prompt = nil
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    /// Empty window → palette (launch, last tab closed); palette centred on a window that now has tabs → gone.
+    @objc private func windowChanged(_ n: Notification) {
+        guard let w = n.object as? BrowserWindow else { return }
+        if w.tabs.isEmpty {
+            if !(isOpen && host === w) { open(in: w) }
+        } else if isOpen, centered, host === w { close() }
     }
 
     // MARK: open / close
 
-    func open(in w: BrowserWindow? = App.shared?.current, query: String = "") {
+    func open(in w: BrowserWindow? = App.shared?.current, query: String = "", newTab: Bool = false) {
         guard let w, let root = w.window?.contentView else { return }
         host = w
+        self.newTab = newTab
+        centered = w.tabs.isEmpty
+        topNormal.isActive = !centered
+        topCentered.isActive = centered
         stack = [rootLevel()]
         backdrop.frame = root.bounds
         backdrop.autoresizingMask = [.width, .height]
@@ -82,7 +105,7 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
     func close() {
         guard isOpen else { return }
         backdrop.removeFromSuperview()
-        if let h = host { h.window?.makeFirstResponder(h.tab.hasWebView ? h.tab.webView : nil) }
+        if let h = host { h.window?.makeFirstResponder(h.tab.flatMap { $0.hasWebView ? $0.webView : nil }) }
     }
 
     private func push(_ level: Level) {
@@ -93,7 +116,10 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
     }
 
     private func pop() {
-        guard stack.count > 1 else { return close() }
+        guard stack.count > 1 else {
+            if centered { field.stringValue = ""; reload(); return }
+            return close()
+        }
         stack.removeLast()
         field.stringValue = stack.last!.query
         reload()
@@ -122,9 +148,12 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         let cmds = ranked(commandItems(), limit: q.isEmpty ? 0 : 6)
         out.append(("Commands", q.isEmpty ? frequentCommands() : cmds))
         out.append(("Settings", q.isEmpty ? [] : ranked(settingItems(), limit: 4)))
+        if !q.isEmpty { out.append(("Add-ons", ranked(addonItems(), limit: 4))) }
         for g in PaletteGroups.shared.query(q) {
             out.append((g.group, g.rows.prefix(6).map { r in
-                Item(icon: "clock", title: r.title, subtitle: r.subtitle, key: "row:\(r.subtitle)", run: r.run)
+                let o = opener(r.url)
+                return Item(icon: "clock", title: r.title, subtitle: r.subtitle, accessory: o.accessory, key: "row:\(r.subtitle)",
+                            run: { r.run(); o.run() }, alt: o.alt.map { a in { r.run(); a() } })
             }))
         }
         if !q.trimmingCharacters(in: .whitespaces).isEmpty { out.append(("Web", [webItem(q)])) }
@@ -162,54 +191,54 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
             .sorted { $0.1 > $1.1 }.prefix(4).map(\.0)
     }
 
+    /// One row per declared setting: choices push a list (✓ on the current value), folders open a panel.
     private func settingItems() -> [Item] {
         let s = Settings.shared
-        let engines = [("Google", "https://www.google.com/search?q=%s"), ("DuckDuckGo", "https://duckduckgo.com/?q=%s"),
-                       ("Kagi", "https://kagi.com/search?q=%s"), ("Perplexity", "https://www.perplexity.ai/search?q=%s"),
-                       ("Bing", "https://www.bing.com/search?q=%s")]
-        let positions = ["top", "bottom", "left", "right", "hidden"]
-        return [
-            Item(icon: "arrow.down.circle", title: "Downloads Folder", subtitle: s.string("downloads.folder"),
-                 accessory: "Setting", key: "set:downloads.folder", primary: "Choose…") {
-                let p = NSOpenPanel()
-                p.canChooseDirectories = true; p.canChooseFiles = false
-                p.directoryURL = s.path("downloads.folder")
-                if p.runModal() == .OK, let u = p.url { s.set("downloads.folder", (u.path as NSString).abbreviatingWithTildeInPath) }
-            },
-            Item(icon: "magnifyingglass", title: "Search Engine", subtitle: engines.first { $0.1 == s.string("search.template") }?.0 ?? s.string("search.template"),
-                 accessory: "Setting", key: "set:search.template", primary: "Change", push: {
-                Level(placeholder: "Search engine") { q in
-                    [("Search Engine", engines.filter { Rank.match(q, $0.0) != nil }.map { e in
-                        Item(icon: "magnifyingglass", title: e.0, subtitle: e.1, key: "engine:\(e.0)", primary: "Use") { s.set("search.template", e.1) }
+        return s.declared.map { d in
+            let cur = s.string(d.key).isEmpty ? (d.options.first?.value ?? "") : s.string(d.key)
+            if d.options.isEmpty {
+                return Item(icon: d.icon, title: d.title, subtitle: s.string(d.key), accessory: "Setting", key: "set:\(d.key)",
+                            primary: "Choose…") { s.chooseFolder(d.key) }
+            }
+            return Item(icon: d.icon, title: d.title, subtitle: d.options.first { $0.value == cur }?.label ?? cur, accessory: "Setting",
+                        key: "set:\(d.key)", primary: "Change", push: {
+                Level(placeholder: d.title) { q in
+                    [(d.title, d.options.filter { Rank.match(q, $0.label) != nil }.map { o in
+                        Item(icon: d.icon, title: o.label, accessory: o.value == cur ? "✓" : "", key: "opt:\(d.key):\(o.value)", primary: "Use") { s.set(d.key, o.value) }
                     })]
                 }
-            }),
-            Item(icon: "rectangle.split.3x1", title: "Tab Position", subtitle: TabStrip.shared.position,
-                 accessory: "Setting", key: "set:tabstrip.position", primary: "Change", push: {
-                Level(placeholder: "Tab position") { q in
-                    [("Tab Position", positions.filter { Rank.match(q, $0) != nil }.map { p in
-                        Item(icon: "rectangle.split.3x1", title: p.capitalized, key: "pos:\(p)", primary: "Use") { TabStrip.shared.position = p }
-                    })]
-                }
-            }),
-            Item(icon: "puzzlepiece.extension", title: "Add-ons", subtitle: "lean://addons", accessory: "Setting",
-                 key: "set:addons", primary: "Open") { Commands.shared.run("addons.open") },
-            Item(icon: "keyboard", title: "Edit Keybindings", subtitle: "~/.config/lean/keys.json", accessory: "Setting",
-                 key: "set:keys", primary: "Open File") {
-                if !FileManager.default.fileExists(atPath: Commands.keysFile.path) { try? "{\n}\n".write(to: Commands.keysFile, atomically: true, encoding: .utf8) }
-                NSWorkspace.shared.open(Commands.keysFile)
-            },
-        ]
+            })
+        }
+    }
+
+    /// Add-ons that are switched off, so they can be found and turned on from the palette.
+    private func addonItems() -> [Item] {
+        let host = AddonHost.shared
+        let all: [(id: String, name: String, summary: String, kind: JSAddon.Kind)] =
+            host.addons.values.map { ($0.id, $0.name.isEmpty ? $0.id : $0.name, $0.summary, $0.kind) }
+            + SwiftAddons.all.map { ($0.id, $0.name, $0.summary, $0.kind) }
+        return all.filter { !host.isEnabled($0.id, $0.kind) }.map { a in
+            Item(icon: "puzzlepiece.extension", title: "Turn On \(a.name)", subtitle: a.summary, accessory: "Add-on", key: "addon:\(a.id)",
+                 primary: "Turn On") { host.setEnabled(a.id, true); App.shared?.current?.toast("\(a.name) turned on") }
+        }
+    }
+
+    /// How a URL row opens: a new tab in new-tab mode or an empty window, else the current tab; ⌘↵ does the other.
+    private func opener(_ url: URL?) -> (run: () -> Void, alt: (() -> Void)?, accessory: String) {
+        guard let url else { return ({}, nil, "") }
+        let w = host
+        let fresh = newTab || w?.tab == nil
+        let inTab: () -> Void = { if let t = w?.tab { t.load(url) } else { w?.open(url, background: false) } }
+        let inNew: () -> Void = { w?.open(url, background: false) }
+        return (fresh ? inNew : inTab, w?.tab == nil ? nil : fresh ? inTab : inNew, w?.tab == nil ? "" : fresh ? "⌘↵ this tab" : "⌘↵ new tab")
     }
 
     private func webItem(_ q: String) -> Item {
         let url = Address.resolve(q)
         let isSearch = url == nil || (!Address.looksLikeHost(q) && !q.contains("://"))
-        let w = host
+        let o = opener(url)
         return Item(icon: isSearch ? "magnifyingglass" : "arrow.up.right", title: isSearch ? "Search the web for “\(q)”" : "Open \(q)",
-                    subtitle: url?.host() ?? "", accessory: "⌘↵ new tab", key: "web", primary: isSearch ? "Search" : "Open",
-                    run: { if let u = url { w?.tab.load(u) } },
-                    alt: { if let u = url { w?.open(u, background: false) } })
+                    subtitle: url?.host() ?? "", accessory: o.accessory, key: "web", primary: isSearch ? "Search" : "Open", run: o.run, alt: o.alt)
     }
 
     // MARK: table
@@ -264,6 +293,8 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
         if let p = item.push { return push(p()) }
         close()
         if alt, let a = item.alt { a() } else { item.run() }
+        // A command that opened no tab must not leave an empty window with nothing in it.
+        if let h = host, h.tabs.isEmpty, !isOpen { open(in: h) }
     }
 
     func numberOfRows(in t: NSTableView) -> Int { rows.count }
@@ -318,13 +349,8 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
     // MARK: views
 
     private func build() {
-        box.material = .popover
-        box.state = .active
-        box.wantsLayer = true
-        box.layer?.cornerRadius = 12
-        box.layer?.masksToBounds = true
         box.translatesAutoresizingMaskIntoConstraints = false
-        backdrop.onClick = { [weak self] in self?.close() }
+        backdrop.onClick = { [weak self] in if self?.centered == false { self?.close() } }
         backdrop.addSubview(box)
 
         field.isBordered = false
@@ -355,31 +381,32 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
 
         for v in [field, sep1, scroll, sep2, hintLeft, hintRight] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
-            box.addSubview(v)
+            glass.content.addSubview(v)
         }
         tableHeight = scroll.heightAnchor.constraint(equalToConstant: 200)
+        topNormal = box.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 72)
+        topCentered = box.topAnchor.constraint(equalTo: backdrop.centerYAnchor, constant: -60)
         NSLayoutConstraint.activate([
             box.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
-            box.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 72),
             box.widthAnchor.constraint(equalToConstant: 640),
             box.widthAnchor.constraint(lessThanOrEqualTo: backdrop.widthAnchor, constant: -32),
-            field.topAnchor.constraint(equalTo: box.topAnchor, constant: 12),
-            field.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 16),
-            field.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -16),
+            field.topAnchor.constraint(equalTo: glass.content.topAnchor, constant: 12),
+            field.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor, constant: 16),
+            field.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor, constant: -16),
             sep1.topAnchor.constraint(equalTo: field.bottomAnchor, constant: 10),
-            sep1.leadingAnchor.constraint(equalTo: box.leadingAnchor),
-            sep1.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            sep1.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor),
+            sep1.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor),
             scroll.topAnchor.constraint(equalTo: sep1.bottomAnchor, constant: 4),
-            scroll.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 6),
-            scroll.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -6),
+            scroll.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor, constant: 6),
+            scroll.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor, constant: -6),
             tableHeight,
             sep2.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 4),
-            sep2.leadingAnchor.constraint(equalTo: box.leadingAnchor),
-            sep2.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            sep2.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor),
+            sep2.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor),
             hintLeft.topAnchor.constraint(equalTo: sep2.bottomAnchor, constant: 7),
-            hintLeft.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 16),
+            hintLeft.leadingAnchor.constraint(equalTo: glass.content.leadingAnchor, constant: 16),
             hintRight.centerYAnchor.constraint(equalTo: hintLeft.centerYAnchor),
-            hintRight.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -16),
+            hintRight.trailingAnchor.constraint(equalTo: glass.content.trailingAnchor, constant: -16),
             box.bottomAnchor.constraint(equalTo: hintLeft.bottomAnchor, constant: 8),
         ])
     }

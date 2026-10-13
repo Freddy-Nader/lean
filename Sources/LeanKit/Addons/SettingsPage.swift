@@ -1,13 +1,13 @@
 import Foundation
 import WebKit
 
-/// lean://addons — every add-on with its on/off switch, kind, commands, last error and logs,
-/// plus which add-on provides each slot. Actions come back through the `leanAddons` handler,
-/// accepted only from lean:// pages.
+/// lean://settings — declared general settings, then every add-on with its on/off switch, kind,
+/// commands, last error and logs, plus which add-on provides each slot. Actions come back through
+/// the `leanSettings` handler, accepted only from lean:// pages.
 @MainActor
-final class AddonsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
-    static let shared = AddonsPage()
-    static let url = URL(string: "lean://addons")!
+final class SettingsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
+    static let shared = SettingsPage()
+    static let url = URL(string: "lean://settings")!
 
     func webView(_ v: WKWebView, start task: WKURLSchemeTask) {
         let html = Data(render().utf8)
@@ -21,7 +21,17 @@ final class AddonsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
 
     func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {
         guard m.frameInfo.request.url?.scheme == "lean",
-              let b = m.body as? [String: Any], let action = b["action"] as? String, let id = b["id"] as? String else { return }
+              let b = m.body as? [String: Any], let action = b["action"] as? String else { return }
+        let s = Settings.shared
+        // A page may only touch declared settings and run keys.edit.
+        let key = (b["key"] as? String).flatMap { k in s.declared.first { $0.key == k } }
+        switch action {
+        case "set": if let key, let v = b["value"] as? String, s.accepts(key.key, v) { s.set(key.key, v) }
+        case "choose": if let key { s.chooseFolder(key.key) }
+        case "command": if b["id"] as? String == "keys.edit" { Commands.shared.run("keys.edit") }
+        default: break
+        }
+        guard let id = b["id"] as? String else { return }
         let host = AddonHost.shared
         switch action {
         case "enable": host.setEnabled(id, true)
@@ -32,7 +42,7 @@ final class AddonsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
         }
     }
 
-    /// Re-renders any open add-ons page.
+    /// Re-renders any open settings page.
     func refresh() {
         for t in App.shared?.allTabs ?? [] where t.url?.scheme == "lean" { t.webView.reload() }
     }
@@ -40,6 +50,22 @@ final class AddonsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
     private func esc(_ s: String) -> String {
         s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
+    }
+
+    private func general() -> String {
+        let s = Settings.shared
+        let rows = s.declared.map { d -> String in
+            let control: String
+            if d.options.isEmpty {
+                control = "<code>\(esc(s.string(d.key)))</code> <button onclick=\"post({action:'choose',key:'\(esc(d.key))'})\">Choose…</button>"
+            } else {
+                let cur = s.string(d.key).isEmpty ? (d.options.first?.value ?? "") : s.string(d.key)
+                control = "<select onchange=\"post({action:'set',key:'\(esc(d.key))',value:this.value})\">"
+                    + d.options.map { "<option value=\"\(esc($0.value))\" \($0.value == cur ? "selected" : "")>\(esc($0.label))</option>" }.joined() + "</select>"
+            }
+            return "<div class=row><span>\(esc(d.title))</span>\(control)</div>"
+        }.joined()
+        return rows + "<div class=row><span>Keybindings</span><button onclick=\"post({action:'command',id:'keys.edit'})\">Edit…</button></div>"
     }
 
     private func render() -> String {
@@ -87,7 +113,7 @@ final class AddonsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
         }.joined()
         let slots = Slots.names.map { "<tr><td><code>\($0)</code></td><td>\(esc(Slots.shared.owner(of: $0) ?? "kernel default"))</td></tr>" }.joined()
         return """
-        <!doctype html><meta charset=utf-8><title>Add-ons</title>
+        <!doctype html><meta charset=utf-8><title>Settings</title>
         <style>
           :root { color-scheme: light dark; font: 13px -apple-system, system-ui; }
           body { max-width: 760px; margin: 32px auto; padding: 0 16px; }
@@ -100,12 +126,17 @@ final class AddonsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
           kbd { font: 11px ui-monospace; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, CanvasText 10%, transparent); }
           pre { white-space: pre-wrap; font: 11px ui-monospace; } .err { color: #d33; }
           td { padding: 2px 12px 2px 0; }
+          .row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent); }
         </style>
-        <h1>Add-ons</h1>
+        <h1>Settings</h1>
+        <h2>General</h2>
+        \(general())
+        <h2 id=addons>Add-ons</h2>
         <p>Drop a <code>.js</code> file into <code>~/.config/lean/addons/</code>; it loads on save. Copy a shipped add-on there to fork it.</p>
         \(native)\(rows)
         <h2>Slots</h2><table>\(slots)</table>
-        <script>const act = (action, id) => webkit.messageHandlers.leanAddons.postMessage({ action, id });</script>
+        <script>const post = (m) => webkit.messageHandlers.leanSettings.postMessage(m);
+          const act = (action, id) => post({ action, id });</script>
         """
     }
 }

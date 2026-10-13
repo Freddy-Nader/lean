@@ -97,8 +97,13 @@ final class BrowserImport: SwiftAddon {
         } catch {
             let a = NSAlert()
             a.messageText = "Import from \(src.name) failed"
-            a.informativeText = "\(error)" + (src.safari ? "\n\nSafari's data needs Full Disk Access: System Settings → Privacy & Security → Full Disk Access → add lean." : "")
-            a.runModal()
+            a.informativeText = "\(error)" + (src.safari ? "\n\nSafari's data needs Full Disk Access: System Settings → Privacy & Security → Full Disk Access → add lean, then quit and relaunch." : "")
+            a.addButton(withTitle: "OK")
+            if src.safari { a.addButton(withTitle: "Open Full Disk Access") }
+            if a.runModal() == .alertSecondButtonReturn,
+               let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                NSWorkspace.shared.open(url)
+            }
         }
     }
 
@@ -106,13 +111,19 @@ final class BrowserImport: SwiftAddon {
 
     struct ImportError: Error, CustomStringConvertible { let description: String }
 
-    /// Chromium keeps its databases locked while running, so read a copy.
+    /// Chromium keeps its databases locked while running, so read a copy. Safari's are WAL-mode:
+    /// the copy needs its -wal/-shm too (recent visits live there), and a read-only open of a
+    /// WAL database without them fails with "unable to open database file", so open read-write.
     static func query(_ db: URL, _ sql: String, _ row: (OpaquePointer) -> Void) throws {
-        let tmp = FileManager.default.temporaryDirectory.appending(path: "lean-import-\(UUID().uuidString).db")
-        try FileManager.default.copyItem(at: db, to: tmp)
-        defer { try? FileManager.default.removeItem(at: tmp) }
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appending(path: "lean-import-\(UUID().uuidString).db")
+        try fm.copyItem(at: db, to: tmp)
+        for ext in ["-wal", "-shm"] {
+            try? fm.copyItem(at: URL(fileURLWithPath: db.path + ext), to: URL(fileURLWithPath: tmp.path + ext))
+        }
+        defer { for ext in ["", "-wal", "-shm"] { try? fm.removeItem(atPath: tmp.path + ext) } }
         var h: OpaquePointer?
-        guard sqlite3_open_v2(tmp.path, &h, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { throw ImportError(description: "cannot open \(db.lastPathComponent)") }
+        guard sqlite3_open_v2(tmp.path, &h, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else { throw ImportError(description: "cannot open \(db.lastPathComponent)") }
         defer { sqlite3_close(h) }
         var st: OpaquePointer?
         guard sqlite3_prepare_v2(h, sql, -1, &st, nil) == SQLITE_OK else {

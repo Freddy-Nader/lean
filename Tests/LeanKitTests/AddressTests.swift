@@ -12,6 +12,15 @@ import Testing
     @Test func searchWords() { #expect(Address.resolve("swift browser")?.absoluteString == "https://www.google.com/search?q=swift%20browser") }
     @Test func searchSymbols() { #expect(Address.resolve("a&b=c")?.absoluteString == "https://www.google.com/search?q=a%26b%3Dc") }
     @Test func versionIsNotDomain() { #expect(Address.resolve("v1.2")?.host() == "www.google.com") }
+    @Test func displayHost() {
+        func d(_ s: String?) -> String { Address.displayHost(s.flatMap(URL.init(string:))) }
+        #expect(d("https://www.inkandswitch.com/essay/x?y") == "inkandswitch.com")
+        #expect(d("https://news.ycombinator.com/item?id=1") == "news.ycombinator.com")
+        #expect(d("lean://settings") == "lean://settings")
+        #expect(d("http://localhost:3000/a") == "localhost")
+        #expect(d("file:///tmp/a.html") == "a.html")
+        #expect(d(nil) == "")
+    }
     @Test func empty() { #expect(Address.resolve("   ") == nil) }
 }
 

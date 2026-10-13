@@ -73,7 +73,7 @@ Rule: the kernel holds only what every user needs to browse. If one person would
 
 `palette` and `tabstrip` are Swift add-ons (native UI, must feel instant); the rest of the defaults are JS. The add-ons page and settings stay in the kernel, so you can always turn add-ons back on.
 
-So the bare browser with every add-on disabled is: one window, tabs switchable only by keys, an address bar, and nothing else. That is the minimal baseline we measure launch time and memory against.
+So the bare browser with every add-on disabled is: one window, tabs switchable only by keys, the focused tab as its own address field, and nothing else. That is the minimal baseline we measure launch time and memory against.
 
 ## Palette (default add-on, ⌘K)
 
@@ -94,7 +94,7 @@ Combines Notion's grouped results with Raycast's interaction model.
 - **Aliases and per-command hotkeys:** assignable from the action panel, written to `keys.json`.
 - **Ranking:** frequency and recency of what you pick, so your common choices rise.
 
-**⌘T** opens a new tab with the address field focused and suggestions underneath. **↓** expands it into the full palette.
+**⌘T** opens the palette; ↵ opens the result in a new tab (with no tab open the palette sits centred and nothing exists until ↵). **⌘L** turns the focused tab into an address field; **↓** there opens the palette with what you typed.
 
 ## Arguments and natural language, without AI
 
@@ -176,6 +176,15 @@ Exploration track, not v1. Any model feature is an optional add-on so the bare b
 ## Optional add-on: darkmode
 
 ⌥N, like Comet. First switches the page to dark appearance so sites with a real dark mode use it; if the page stays light, applies a CSS inversion that re-inverts images and video. Remembered per site, plus a global "dark everywhere" setting. Injected at document start so there is no white flash.
+
+## Default add-on: updater (Swift)
+
+GitHub commits are the updates. CI builds each push to main and publishes the rolling release `latest`: `manifest.json` (commit, SHA-256 of the binary and of every add-on file), the binary, and the add-on files. Every 6 h and on `update.check` the app fetches the manifest and downloads only what differs, verifying every hash before touching disk.
+
+- Add-on files land in `~/.config/lean/updates/`, loaded after the bundled ones and before the user's own, and hot-reload. The overlay counts only while its recorded base commit equals the app's `LeanCommit`, so a reinstall or a local build ignores stale files.
+- A new binary is renamed over `Contents/MacOS/lean` (the running process keeps its copy), the bundle is re-signed ad hoc, and it takes effect at the next launch or `update.restart`. The old binary stays in `updates/lean.prev`.
+- Switch: the add-on's own switch on lean://addons. Local builds (`LeanCommit` = `dev`) never update.
+- Limits: arm64 only (the CI runner's architecture); a file deleted from the repo stays in the bundle; EasyList is not updated; trust is the repo owner's GitHub account (no manifest signature yet).
 
 ## Optional add-on: import from other browsers (Swift)
 

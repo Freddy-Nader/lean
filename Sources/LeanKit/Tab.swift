@@ -10,7 +10,7 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
         c.websiteDataStore = .default()
         c.preferences.isElementFullscreenEnabled = true
         c.mediaTypesRequiringUserActionForPlayback = []
-        c.setURLSchemeHandler(AddonsPage.shared, forURLScheme: "lean")
+        c.setURLSchemeHandler(SettingsPage.shared, forURLScheme: "lean")
         return c
     }()
 
@@ -19,9 +19,14 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
         c.userContentController = WKUserContentController()
         Rules.shared.attach(c.userContentController)
         AddonHost.shared.attach(c.userContentController)
-        c.userContentController.add(WeakHandler(AddonsPage.shared), name: "leanAddons")
+        c.userContentController.add(WeakHandler(SettingsPage.shared), name: "leanSettings")
         return c
     }
+
+    /// Site icons by host, filled after page loads.
+    static var icons: [String: NSImage] = [:]
+    private static var tried: Set<String> = []
+    var favicon: NSImage? { url?.host().flatMap { Self.icons[$0] } }
 
     let id = UUID()
     private(set) var pendingURL: URL?
@@ -113,6 +118,19 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
 
     func webView(_ v: WKWebView, didFinish n: WKNavigation!) {
         AddonHost.shared.emit("tabLoaded", ["id": id.uuidString, "url": url?.absoluteString ?? "", "title": title])
+        guard let page = v.url, let host = page.host(), page.scheme?.hasPrefix("http") == true, Self.tried.insert(host).inserted else { return }
+        v.evaluateJavaScript(#"document.querySelector('link[rel~="icon"]')?.href ?? ""#) { [weak self] r, _ in
+            MainActor.assumeIsolated {
+                let href = (r as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) } ?? URL(string: "/favicon.ico", relativeTo: page)
+                guard let href else { return }
+                Task { @MainActor in
+                    if let (d, _) = try? await URLSession.shared.data(from: href), let img = NSImage(data: d) {
+                        Self.icons[host] = img
+                        self?.changed()
+                    }
+                }
+            }
+        }
     }
 
     // MARK: downloads

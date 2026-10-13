@@ -53,7 +53,8 @@ export default {
         .map(({ e, key }) => ({
           title: e.title || key,
           subtitle: key,
-          run: () => { rank.pick("hist:" + key); tabs.active() ? tabs.active().navigate(e.url) : tabs.open(e.url); },
+          url: e.url,   // opens like a typed address: new tab after ⌘T
+          run: () => rank.pick("hist:" + key),
         }));
     });
   },

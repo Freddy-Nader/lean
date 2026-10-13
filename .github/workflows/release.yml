@@ -1,0 +1,50 @@
+# Every push to main: test, build, and publish the rolling release `latest` that lean's
+# auto-updater reads (scripts/manifest.py describes the assets). Manifest goes up last, so a
+# client never sees a manifest whose files are not there yet.
+name: release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: macos-15
+    env:
+      LEAN_P12: ${{ secrets.LEAN_P12 }}
+      LEAN_P12_PASSWORD: ${{ secrets.LEAN_P12_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      - run: swift test
+      - run: python3 -I Tests/test_rules.py && python3 -I Tests/test_manifest.py
+      # The "lean" cert (scripts/signing-cert.sh) keeps the app's identity, and its Full Disk
+      # Access grant, the same across updates. Without the secrets build.sh signs ad hoc.
+      - name: Import signing cert
+        if: env.LEAN_P12 != ''
+        run: |
+          KC="$RUNNER_TEMP/sign.keychain-db"; PW=$(openssl rand -hex 16)
+          echo "$LEAN_P12" | base64 --decode > "$RUNNER_TEMP/lean.p12"
+          security create-keychain -p "$PW" "$KC"
+          security set-keychain-settings "$KC"
+          security unlock-keychain -p "$PW" "$KC"
+          security import "$RUNNER_TEMP/lean.p12" -k "$KC" -P "$LEAN_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$PW" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/lean.p12"
+      - run: LEAN_COMMIT=${{ github.sha }} ./build.sh
+      - run: python3 -I scripts/manifest.py build/lean.app dist
+      - run: ditto -c -k --keepParent build/lean.app dist/lean.app.zip
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest >/dev/null 2>&1 || gh release create latest \
+            --title latest --prerelease --target "$GITHUB_SHA" \
+            --notes "Rolling build of main, read by lean's auto-updater. Install: see README."
+          cd dist
+          gh release upload latest $(ls | grep -v '^manifest.json$') --clobber
+          gh release upload latest manifest.json --clobber

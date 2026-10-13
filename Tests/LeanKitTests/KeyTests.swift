@@ -12,6 +12,7 @@ import Testing
         #expect(Key("cmd+shift+c")?.description == "⇧⌘C")
         #expect(Key("ctrl+tab")?.description == "⌃⇥")
     }
+    @Test func parsesComma() { #expect(Key("cmd+,")?.key == ",") }
     @Test func rejectsModifierOnly() { #expect(Key("cmd+shift") == nil) }
 
     @Test func registryRunsAndUserCanRebind() {

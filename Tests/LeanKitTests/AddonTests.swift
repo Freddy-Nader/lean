@@ -74,3 +74,16 @@ import Testing
         a.unload()
     }
 }
+
+@MainActor
+@Suite struct PaletteRowTests {
+    @Test func rowsCarryAnOptionalURL() throws {
+        let f = FileManager.default.temporaryDirectory.appending(path: "p\(UUID().uuidString.prefix(6)).js")
+        try "export default { setup({ palette }) { palette.addGroup('G', () => [{ title: 'a', url: 'https://a.com/x' }, { title: 'b' }]) } };".write(to: f, atomically: true, encoding: .utf8)
+        let a = JSAddon(file: f, kind: .user)
+        a.load()
+        let rows = PaletteGroups.shared.query("q").first { $0.group == "G" }?.rows
+        #expect(rows?.map(\.url?.absoluteString) == ["https://a.com/x", nil])
+        a.unload()
+    }
+}

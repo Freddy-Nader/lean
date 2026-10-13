@@ -38,7 +38,7 @@ public final class Slots {
 @MainActor
 public final class PaletteGroups {
     public static let shared = PaletteGroups()
-    public struct Row { public let title: String; public let subtitle: String; public let run: () -> Void }
+    public struct Row { public let title: String; public let subtitle: String; public let url: URL?; public let run: () -> Void }
 
     private var groups: [(name: String, owner: String, provider: JSValue)] = []
 
@@ -51,7 +51,8 @@ public final class PaletteGroups {
             let rows: [Row] = (0..<n).compactMap { i -> Row? in
                 guard let item = arr.atIndex(Int(i)), let title = item.forProperty("title")?.stringOrNil else { return nil }
                 let run = item.forProperty("run")
-                return Row(title: title, subtitle: item.forProperty("subtitle")?.stringOrNil ?? "") {
+                return Row(title: title, subtitle: item.forProperty("subtitle")?.stringOrNil ?? "",
+                           url: item.forProperty("url")?.stringOrNil.flatMap(URL.init(string:))) {
                     if let run, run.isFunction { run.call(withArguments: []) }
                 }
             }
