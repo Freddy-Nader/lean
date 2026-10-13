@@ -194,14 +194,22 @@ final class Updater: SwiftAddon {
         try? fm.removeItem(at: prev)
         try fm.copyItem(at: exe, to: prev)
         try Self.swap(binary, into: exe)
-        let (status, output) = Self.run("/usr/bin/codesign", ["--force", "--sign", "-", Bundle.main.bundleURL.path])
+        let (status, output) = Self.sign()
         if status != 0 {
             if let old = try? Data(contentsOf: prev) {
                 try? Self.swap(old, into: exe)
-                _ = Self.run("/usr/bin/codesign", ["--force", "--sign", "-", Bundle.main.bundleURL.path])
+                _ = Self.sign()
             }
             throw Failure.sign(output)
         }
+    }
+
+    /// Signs with the "lean" keychain cert when there is one (scripts/signing-cert.sh), so the app
+    /// keeps its identity and its privacy grants (Full Disk Access) across updates; else ad hoc.
+    private static func sign() -> (Int32, String) {
+        let app = Bundle.main.bundleURL.path
+        let signed = run("/usr/bin/codesign", ["--force", "--sign", "lean", app])
+        return signed.0 == 0 ? signed : run("/usr/bin/codesign", ["--force", "--sign", "-", app])
     }
 
     private static func swap(_ data: Data, into exe: URL) throws {

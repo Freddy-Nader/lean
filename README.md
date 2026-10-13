@@ -49,9 +49,18 @@ with a manifest of hashes. Every 6 hours (and on "Check for Updates" in the pale
 downloads only what differs:
 
 - changed add-on files go to ~/.config/lean/updates/ and hot-reload, no restart;
-- a changed binary replaces Contents/MacOS/lean, the app is re-signed ad hoc, and the new
+- a changed binary replaces Contents/MacOS/lean, the app is re-signed (with the "lean" cert if the
+  keychain has it, else ad hoc), and the new
   build runs at the next launch ("Restart to Finish Update" in the palette does it now).
   The previous binary is kept at ~/.config/lean/updates/lean.prev.
+
+Signing: an ad-hoc signature changes the app's identity every build, so macOS drops privacy grants
+(Full Disk Access, needed for Safari import). Run `scripts/signing-cert.sh` once per Mac: it makes a
+self-signed "lean" cert in the login keychain that `build.sh` and the updater sign with (click
+"Always Allow" on the first keychain prompt). For CI, add two repo secrets (Settings → Secrets →
+Actions): `LEAN_P12` = output of `base64 -i ~/.config/lean/signing/lean.p12`, and
+`LEAN_P12_PASSWORD` = contents of `~/.config/lean/signing/p12-password`. Grant Full Disk Access
+once more after switching to the cert; it then sticks.
 
 Local builds (`./build.sh`) are stamped "dev" and never update themselves. Only builds made by CI
 (or with `LEAN_COMMIT=<sha> ./build.sh`) do. To get a self-updating install, once:
