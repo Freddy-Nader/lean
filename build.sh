@@ -13,5 +13,6 @@ plutil -replace LeanCommit -string "${LEAN_COMMIT:-dev}" "$APP/Contents/Info.pli
 [ -d Resources/rules ] || python3 -I scripts/rules.py Resources/rules
 cp -Rp Resources/rules "$APP/Contents/Resources/"   # -p keeps mtimes, so WebKit's compiled-list cache stays valid
 [ -d addons ] && cp -R addons "$APP/Contents/Resources/"
+xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" --output-format human-readable-text --notices --warnings --errors --output-partial-info-plist /dev/null --app-icon AppIcon --include-all-app-icons --enable-on-demand-resources NO --target-device mac --platform macosx --minimum-deployment-target 15.4 >/dev/null
 codesign --force --sign - "$APP" >/dev/null 2>&1
 echo "built $APP"
