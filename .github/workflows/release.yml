@@ -1,10 +1,10 @@
-# Every push to main: test, build, and publish the rolling release `latest` that lean's
+# Every push to master: test, build, and publish the rolling release `latest` that lean's
 # auto-updater reads (scripts/manifest.py describes the assets). Manifest goes up last, so a
 # client never sees a manifest whose files are not there yet.
 name: release
 on:
   push:
-    branches: [main]
+    branches: [master]
 permissions:
   contents: write
 concurrency:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   publish:
-    runs-on: macos-15
+    runs-on: macos-26   # NSGlassEffectView and actool for .icon need the macOS 26 SDK
     env:
       LEAN_P12: ${{ secrets.LEAN_P12 }}
       LEAN_P12_PASSWORD: ${{ secrets.LEAN_P12_PASSWORD }}
@@ -44,7 +44,7 @@ jobs:
         run: |
           gh release view latest >/dev/null 2>&1 || gh release create latest \
             --title latest --prerelease --target "$GITHUB_SHA" \
-            --notes "Rolling build of main, read by lean's auto-updater. Install: see README."
+            --notes "Rolling build of master, read by lean's auto-updater. Install: see README."
           cd dist
           gh release upload latest $(ls | grep -v '^manifest.json$') --clobber
           gh release upload latest manifest.json --clobber

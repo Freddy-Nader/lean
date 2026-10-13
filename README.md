@@ -44,7 +44,7 @@ build/lean.app/Contents/MacOS/lean --run snapshot /tmp/s.png   # PNG of the wind
 ## Auto-update
 
 A default add-on (`updater`; switch it off on lean://addons). It follows GitHub: every push to
-main is built by CI (.github/workflows/release.yml) and published as the rolling release `latest`
+master is built by CI (.github/workflows/release.yml) and published as the rolling release `latest`
 with a manifest of hashes. Every 6 hours (and on "Check for Updates" in the palette) lean
 downloads only what differs:
 

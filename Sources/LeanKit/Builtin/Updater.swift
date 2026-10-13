@@ -1,7 +1,7 @@
 import AppKit
 import CryptoKit
 
-/// What CI publishes with every build of main: the commit, the SHA-256 of the lean binary, and the
+/// What CI publishes with every build of master: the commit, the SHA-256 of the lean binary, and the
 /// SHA-256 of every add-on file (path under Resources → hash).
 struct UpdateManifest: Codable, Equatable {
     let commit: String
@@ -9,7 +9,7 @@ struct UpdateManifest: Codable, Equatable {
     let files: [String: String]
 }
 
-/// Auto-update from GitHub (default Swift add-on). CI builds each push to main and publishes the
+/// Auto-update from GitHub (default Swift add-on). CI builds each push to master and publishes the
 /// rolling release `latest`: manifest.json, the binary, and the add-on files (scripts/manifest.py).
 /// A check downloads only what differs from what is installed:
 ///   - add-on files land in ~/.config/lean/updates/ (layered over the signed bundle by AddonHost)
