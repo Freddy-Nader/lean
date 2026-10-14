@@ -151,7 +151,11 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate {
     /// Inserts after the active tab, like Chrome.
     func add(_ t: Tab, select: Bool) {
         t.onChange = { [weak self] t in self?.refresh(t) }
-        t.onOpen = { [weak self] url, background in self?.open(url, background: background, opener: t) }
+        t.onOpen = { [weak self] url, background in
+            // Pages may not open file: or data: URLs; loading them natively would skip WebKit's block.
+            guard ["http", "https", "about"].contains(url.scheme?.lowercased() ?? "") else { return }
+            self?.open(url, background: background)
+        }
         let i = tabs.isEmpty ? 0 : activeIndex + 1
         let select = select || tabs.isEmpty
         tabs.insert(t, at: i)
@@ -161,7 +165,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate {
     }
 
     @discardableResult
-    func open(_ url: URL, background: Bool, opener: Tab? = nil) -> Tab {
+    func open(_ url: URL, background: Bool) -> Tab {
         let t = Tab(url: url)
         add(t, select: !background)
         if background { t.materializeInBackground() }
