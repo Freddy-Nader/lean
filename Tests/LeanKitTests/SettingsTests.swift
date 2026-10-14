@@ -24,6 +24,18 @@ import Testing
         #expect(!s.accepts("nope", "x"))
     }
 
+    @Test func addonsMayNotWriteSwitchesOrOthersSettings() {
+        let s = Settings.shared
+        s.declareKernel()
+        #expect(!s.addon("a", maySet: "addons.disabled", ["updater"]))
+        #expect(!s.addon("a", maySet: "search.template", "https://evil.example/?q=%s"))
+        #expect(s.addon("a", maySet: "search.template", "https://kagi.com/search?q=%s"))
+        #expect(!s.addon("a", maySet: "downloads.folder", "~/Library/LaunchAgents"))
+        #expect(s.addon("a", maySet: "a.own", 1))
+        #expect(!s.addon("a", mayDeclare: "search.template") && !s.addon("a", mayDeclare: "addons.enabled"))
+        #expect(s.addon("a", mayDeclare: "a.own"))
+    }
+
     @Test func kernelDeclaresItsSettings() {
         Settings.shared.declareKernel()
         let keys = Settings.shared.declared.map(\.key)
