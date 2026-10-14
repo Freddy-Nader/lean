@@ -256,7 +256,11 @@ public final class JSAddon {
                 let u = target.hasPrefix("/") || target.hasPrefix("~")
                     ? URL(fileURLWithPath: (target as NSString).expandingTildeInPath) : URL(string: target)
                 guard let u else { return }
-                if reveal { NSWorkspace.shared.activateFileViewerSelecting([u]) } else { NSWorkspace.shared.open(u) }
+                if reveal { NSWorkspace.shared.activateFileViewerSelecting([u]); return }
+                // Opening launches apps and scripts, so only web pages and files the user downloaded.
+                let downloaded = u.isFileURL && Downloads.shared.items.contains { $0.done && $0.file?.standardizedFileURL == u.standardizedFileURL }
+                guard ["http", "https"].contains(u.scheme?.lowercased() ?? "") || downloaded else { return }
+                NSWorkspace.shared.open(u)
             }
         }
         let rankMatch: @convention(block) (String, String) -> Any = { q, t in Rank.match(q, t) ?? NSNull() }
