@@ -61,59 +61,53 @@ final class SettingsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
         let rows = s.declared.map { d -> String in
             let control: String
             if d.options.isEmpty {
-                control = "<code>\(esc(s.string(d.key)))</code> <button onclick=\"post({action:'choose',key:'\(esc(d.key))'})\">Choose…</button>"
+                control = "<code>\(esc(s.string(d.key)))</code> <button onclick=\"post({action:'choose',key:this.closest('.row').dataset.key})\">Choose…</button>"
             } else {
                 let cur = s.string(d.key).isEmpty ? (d.options.first?.value ?? "") : s.string(d.key)
-                control = "<select onchange=\"post({action:'set',key:'\(esc(d.key))',value:this.value})\">"
+                control = "<select onchange=\"post({action:'set',key:this.closest('.row').dataset.key,value:this.value})\">"
                     + d.options.map { "<option value=\"\(esc($0.value))\" \($0.value == cur ? "selected" : "")>\(esc($0.label))</option>" }.joined() + "</select>"
             }
-            return "<div class=row><span>\(esc(d.title))</span>\(control)</div>"
+            return "<div class=row data-key=\"\(esc(d.key))\"><span>\(esc(d.title))</span>\(control)</div>"
         }.joined()
         return rows + "<div class=row><span>Keybindings</span><button onclick=\"post({action:'command',id:'keys.edit'})\">Edit…</button></div>"
     }
 
+    /// One add-on's card. The id goes in data-id, never into the onclick JavaScript.
+    private func section(_ id: String, _ name: String, kind: String, on: Bool, summary: String,
+                         commands: [String], file: Bool, extra: String) -> String {
+        let cmds = commands.map { c in
+            "<code>\(esc(c))</code>" + (Commands.shared.key(for: c).map { " <kbd>\(esc($0))</kbd>" } ?? "")
+        }.joined(separator: " ")
+        let buttons = file ? """
+            <span class=spacer></span>
+            <button onclick="act('reload',this)">Reload</button>
+            <button onclick="act('reveal',this)">Show file</button>
+            """ : ""
+        return """
+        <section class="\(on ? "" : "off")" data-id="\(esc(id))">
+          <header>
+            <label><input type=checkbox \(on ? "checked" : "") onchange="act(this.checked?'enable':'disable',this)">
+            <b>\(esc(name))</b></label>
+            <span class=kind>\(esc(kind))</span>\(buttons)
+          </header>
+          <p>\(esc(summary))</p>
+          \(cmds.isEmpty ? "" : "<p class=cmds>\(cmds)</p>")\(extra)
+        </section>
+        """
+    }
+
     private func render() -> String {
         let host = AddonHost.shared
-        let rows = host.addons.values.sorted { ($0.kind.rawValue, $0.id) < ($1.kind.rawValue, $1.id) }.map { a -> String in
-            let on = host.isEnabled(a.id, a.kind)
-            let cmds = a.commandIDs.map { id in
-                "<code>\(esc(id))</code>" + (Commands.shared.key(for: id).map { " <kbd>\(esc($0))</kbd>" } ?? "")
-            }.joined(separator: " ")
+        let rows = host.addons.values.sorted { ($0.kind.rawValue, $0.id) < ($1.kind.rawValue, $1.id) }.map { a in
             let err = a.error.map { "<pre class=err>\(esc($0))</pre>" } ?? ""
             let logs = a.logs.isEmpty ? "" : "<details><summary>log</summary><pre>\(esc(a.logs.suffix(20).joined(separator: "\n")))</pre></details>"
-            return """
-            <section class="\(on ? "" : "off")">
-              <header>
-                <label><input type=checkbox \(on ? "checked" : "") onchange="act(this.checked?'enable':'disable','\(a.id)')">
-                <b>\(esc(a.name.isEmpty ? a.id : a.name))</b></label>
-                <span class=kind>\(a.kind.rawValue)</span>
-                <span class=spacer></span>
-                <button onclick="act('reload','\(a.id)')">Reload</button>
-                <button onclick="act('reveal','\(a.id)')">Show file</button>
-              </header>
-              <p>\(esc(a.summary))</p>
-              \(cmds.isEmpty ? "" : "<p class=cmds>\(cmds)</p>")
-              \(err)\(logs)
-            </section>
-            """
+            return section(a.id, a.name.isEmpty ? a.id : a.name, kind: a.kind.rawValue, on: host.isEnabled(a.id, a.kind),
+                           summary: a.summary, commands: a.commandIDs, file: true, extra: err + logs)
         }.joined()
-        let native = SwiftAddons.all.map { a -> String in
-            let on = host.isEnabled(a.id, a.kind)
-            let cmds = Commands.shared.all.values.filter { $0.owner == a.id }.map(\.id).sorted().map { id in
-                "<code>\(esc(id))</code>" + (Commands.shared.key(for: id).map { " <kbd>\(esc($0))</kbd>" } ?? "")
-            }.joined(separator: " ")
-            let err = SwiftAddons.errors[a.id].map { "<pre class=err>\(esc($0))</pre>" } ?? ""
-            return """
-            <section class="\(on ? "" : "off")">
-              <header>
-                <label><input type=checkbox \(on ? "checked" : "") onchange="act(this.checked?'enable':'disable','\(a.id)')">
-                <b>\(esc(a.name))</b></label>
-                <span class=kind>\(a.kind.rawValue) · swift</span>
-              </header>
-              <p>\(esc(a.summary))</p>
-              \(cmds.isEmpty ? "" : "<p class=cmds>\(cmds)</p>")\(err)
-            </section>
-            """
+        let native = SwiftAddons.all.map { a in
+            section(a.id, a.name, kind: "\(a.kind.rawValue) · swift", on: host.isEnabled(a.id, a.kind), summary: a.summary,
+                    commands: Commands.shared.all.values.filter { $0.owner == a.id }.map(\.id).sorted(), file: false,
+                    extra: SwiftAddons.errors[a.id].map { "<pre class=err>\(esc($0))</pre>" } ?? "")
         }.joined()
         let slots = Slots.names.map { "<tr><td><code>\($0)</code></td><td>\(esc(Slots.shared.owner(of: $0) ?? "kernel default"))</td></tr>" }.joined()
         return """
@@ -140,7 +134,7 @@ final class SettingsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
         \(native)\(rows)
         <h2>Slots</h2><table>\(slots)</table>
         <script>const post = (m) => webkit.messageHandlers.leanSettings.postMessage(m);
-          const act = (action, id) => post({ action, id });</script>
+          const act = (action, el) => post({ action, id: el.closest('section').dataset.id });</script>
         """
     }
 }
