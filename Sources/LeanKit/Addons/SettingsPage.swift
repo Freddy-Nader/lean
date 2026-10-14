@@ -10,6 +10,10 @@ final class SettingsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
     static let url = URL(string: "lean://settings")!
 
     func webView(_ v: WKWebView, start task: WKURLSchemeTask) {
+        // Only as a page of its own: framed inside a web page, its switches could be clickjacked.
+        guard task.request.mainDocumentURL.map({ $0.scheme == "lean" }) ?? true else {
+            return task.didFailWithError(URLError(.noPermissionsToReadFile))
+        }
         let html = Data(render().utf8)
         task.didReceive(URLResponse(url: task.request.url ?? Self.url, mimeType: "text/html",
                                     expectedContentLength: html.count, textEncodingName: "utf-8"))
@@ -20,7 +24,7 @@ final class SettingsPage: NSObject, WKURLSchemeHandler, WKScriptMessageHandler {
     func webView(_ v: WKWebView, stop task: WKURLSchemeTask) {}
 
     func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {
-        guard m.frameInfo.request.url?.scheme == "lean",
+        guard m.frameInfo.isMainFrame, m.frameInfo.request.url?.scheme == "lean",
               let b = m.body as? [String: Any], let action = b["action"] as? String else { return }
         let s = Settings.shared
         // A page may only touch declared settings and run keys.edit.
