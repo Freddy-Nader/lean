@@ -250,7 +250,7 @@ final class Updater: SwiftAddon {
         Commands.shared.register("update.restart", "Restart to Finish Update", owner: id) {
             let relaunch = Process()
             relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
-            relaunch.arguments = ["-c", "while kill -0 \(getpid()) 2>/dev/null; do sleep 0.1; done; exec open \"$0\"",
+            relaunch.arguments = ["-c", "while kill -0 \(getpid()) 2>/dev/null; do sleep 0.1; done; exec /usr/bin/open \"$0\"",
                                   Bundle.main.bundleURL.path]
             try? relaunch.run()
             NSApp.terminate(nil)
