@@ -184,7 +184,7 @@ GitHub commits are the updates. CI builds each push to main and publishes the ro
 - Add-on files land in `~/.config/lean/updates/`, loaded after the bundled ones and before the user's own, and hot-reload. The overlay counts only while its recorded base commit equals the app's `LeanCommit`, so a reinstall or a local build ignores stale files.
 - A new binary is renamed over `Contents/MacOS/lean` (the running process keeps its copy), the bundle is re-signed ad hoc, and it takes effect at the next launch or `update.restart`. The old binary stays in `updates/lean.prev`.
 - Switch: the add-on's own switch on lean://addons. Local builds (`LeanCommit` = `dev`) never update.
-- Limits: arm64 only (the CI runner's architecture); a file deleted from the repo stays in the bundle; EasyList is not updated; trust is the repo owner's GitHub account (no manifest signature yet).
+- Limits: arm64 only (the CI runner's architecture); a file deleted from the repo stays in the bundle; EasyList is not updated; trust is the Ed25519 update key (`LEAN_UPDATE_KEY` secret; `manifest.sig` must verify against `Updater.publicKey` before the manifest is read).
 
 ## Optional add-on: import from other browsers (Swift)
 

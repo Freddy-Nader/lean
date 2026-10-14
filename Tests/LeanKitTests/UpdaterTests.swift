@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import LeanKit
@@ -27,6 +28,17 @@ import Testing
 
     @Test func hashIsHexSha256() {
         #expect(Updater.sha256(Data("abc".utf8)) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    }
+
+    @Test func onlyManifestsSignedByTheKeyVerify() throws {
+        let key = Curve25519.Signing.PrivateKey(), other = Curve25519.Signing.PrivateKey()
+        let pub = key.publicKey.rawRepresentation.base64EncodedString()
+        let data = Data(#"{"commit":"c","binary":"b","files":{}}"#.utf8)
+        let sig = try key.signature(for: data)
+        #expect(Updater.verify(data, signature: sig, key: pub))
+        #expect(!Updater.verify(data + Data(" ".utf8), signature: sig, key: pub))
+        #expect(!Updater.verify(data, signature: try other.signature(for: data), key: pub))
+        #expect(!Updater.verify(data, signature: sig, key: ""))   // no key set: nothing verifies
     }
 
     @Test func manifestDecodes() throws {

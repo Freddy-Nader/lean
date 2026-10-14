@@ -45,7 +45,7 @@ build/lean.app/Contents/MacOS/lean --run snapshot /tmp/s.png   # PNG of the wind
 
 A default add-on (`updater`; switch it off on lean://addons). It follows GitHub: every push to
 master is built by CI (.github/workflows/release.yml) and published as the rolling release `latest`
-with a manifest of hashes. Every 6 hours (and on "Check for Updates" in the palette) lean
+with a manifest of hashes, signed with an Ed25519 key. Every 6 hours (and on "Check for Updates" in the palette) lean
 downloads only what differs:
 
 - changed add-on files go to ~/.config/lean/updates/ and hot-reload, no restart;
@@ -68,9 +68,14 @@ Local builds (`./build.sh`) are stamped "dev" and never update themselves. Only 
     curl -L https://github.com/Freddy-Nader/lean/releases/download/latest/lean.app.zip -o /tmp/lean.zip
     ditto -x -k /tmp/lean.zip ~/Applications
 
+Update key: lean installs nothing unless `manifest.json` comes with `manifest.sig`, a valid
+signature from the public key in `Updater.publicKey`. Once: `swift scripts/update-key.swift keygen`,
+put the public half in `Updater.swift` and the private half in the `LEAN_UPDATE_KEY` repo secret.
+Without the secret the release workflow fails rather than publish an unsigned manifest.
+
 (curl adds no quarantine flag, so Gatekeeper stays quiet.) Rules lists (EasyList) are not part of
 updates; they ship in the app. Test it without GitHub: `python3 scripts/manifest.py build/lean.app dist`,
-serve `dist/` with `python3 -m http.server`, and launch with `LEAN_UPDATE_URL=http://127.0.0.1:8000`.
+`LEAN_UPDATE_KEY=<private key> swift scripts/update-key.swift sign dist/manifest.json`, serve `dist/` with `python3 -m http.server`, and launch with `LEAN_UPDATE_URL=http://127.0.0.1:8000`.
 
 ## Settings
 
