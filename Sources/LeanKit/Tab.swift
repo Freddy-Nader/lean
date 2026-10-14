@@ -76,9 +76,6 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
         if !hasWebView, let u = pendingURL { load(u) } else { _ = webView }
     }
 
-    /// Starts loading without being shown (background tabs).
-    func materializeInBackground() { if !hasWebView, let u = pendingURL { load(u) } }
-
     func discard() {
         guard hasWebView else { return }
         webView.stopLoading()

@@ -144,7 +144,7 @@ public final class JSAddon {
     func setPageData(_ json: String) {
         pageData = json
         rebuildPageScript()
-        AddonHost.shared.scriptsChanged()
+        AddonHost.shared.refreshScripts()
     }
 
     private func rebuildPageScript() {

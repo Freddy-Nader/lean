@@ -168,7 +168,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate {
     func open(_ url: URL, background: Bool) -> Tab {
         let t = Tab(url: url)
         add(t, select: !background)
-        if background { t.materializeInBackground() }
+        if background { t.materialize() }   // starts loading without being shown
         return t
     }
 

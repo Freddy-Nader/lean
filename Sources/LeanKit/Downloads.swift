@@ -8,7 +8,6 @@ public final class Downloads: NSObject, WKDownloadDelegate {
     public static let shared = Downloads()
 
     public struct Item {
-        public let id = UUID()
         public let source: URL?
         public var file: URL?
         public var done = false

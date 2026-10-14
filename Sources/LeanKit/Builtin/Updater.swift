@@ -65,7 +65,6 @@ final class Updater: SwiftAddon {
     struct State: Codable, Equatable {
         /// The `LeanCommit` of the app these files were layered over; a reinstall invalidates them.
         var base: String
-        var commit: String
         /// Manifest hash of the binary last installed, and the hash that binary has on disk after
         /// re-signing (signing changes the bytes, so the two differ). Trusted only while the file
         /// on disk still has that hash.
@@ -157,7 +156,7 @@ final class Updater: SwiftAddon {
             let binary = newBinary ? try await fetch("lean", sha256: m.binary) : nil
 
             if let binary { try install(binary: binary, at: exe) }
-            try write(contents, State(base: Self.bundleCommit, commit: m.commit, binary: newBinary ? m.binary : have,
+            try write(contents, State(base: Self.bundleCommit, binary: newBinary ? m.binary : have,
                                       exe: newBinary ? Self.sha256(try Data(contentsOf: exe)) : onDisk))
             AddonHost.shared.rescan()
 

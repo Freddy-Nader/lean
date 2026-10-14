@@ -68,7 +68,6 @@ final class Palette: NSObject, SwiftAddon, NSTableViewDataSource, NSTableViewDel
 
     func unload() {
         close()
-        Commands.shared.unregister("palette.open")
         Slots.shared.removeNative("palette", owner: id)
         BrowserWindow.prompt = nil
         NotificationCenter.default.removeObserver(self)

@@ -52,7 +52,7 @@ import Testing
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         #expect(Updater.overlay(in: dir, commit: "abc") == nil)   // no state yet
-        try JSONEncoder().encode(Updater.State(base: "abc", commit: "new")).write(to: dir.appending(path: "state.json"))
+        try JSONEncoder().encode(Updater.State(base: "abc")).write(to: dir.appending(path: "state.json"))
         #expect(Updater.overlay(in: dir, commit: "abc") == dir)
         #expect(Updater.overlay(in: dir, commit: "other") == nil)  // reinstalled app
         #expect(Updater.overlay(in: dir, commit: "dev") == nil)    // local builds ignore updates
