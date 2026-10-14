@@ -5,7 +5,7 @@ description: >
   against cases that never happen in practice) and for security holes typical of AI-written code.
   Use when the user says "/audit", "audit this", "what's overcomplicated", "what can we cut",
   "find bloat", "is this safe", "security check", or points at files and asks if they can be
-  leaner. Read-only by default; fixes only what the user picks.
+  leaner. Fixes the sure, small findings itself and drafts the fix for every other one.
 argument-hint: "[path ...]"
 ---
 
@@ -74,17 +74,35 @@ As cuts (1–2): validation at trust boundaries (web content, add-on input, file
 handling that prevents data loss, security checks, accessibility, anything in `API.md` add-ons
 may use, and anything `SPEC.md` asks for. Style nits are not findings.
 
+## Fix, then report
+
+A list of problems is not the deliverable. Every finding ends either fixed or with a fix ready to
+apply.
+
+**Fix it yourself** when all of these hold: it is *sure*, it touches one or two files, it changes
+no behavior anyone relies on (or it closes a security hole without changing what a legitimate user
+or add-on sees), and it needs no decision from the user. Typical cases: deleting dead code, removing
+an unused option, replacing hand-rolled code with the stdlib, escaping a value before it reaches
+JS, adding a missing path or host check. Apply each as the smallest diff, then run `./build.sh` and
+the tests once at the end. If the build or a test fails, revert that one fix and move it to the
+drafted list with the error.
+
+**Draft the fix** for everything else: *unsure* findings, changes across many files, anything that
+changes behavior, an `API.md` surface, or a `SPEC.md` decision. A draft is concrete enough that the
+user can say "do it" and you can apply it without re-reading: the files and lines to change, the
+new code (a short diff or snippet), what it breaks or who must update, and how to check it worked.
+
 ## Report
 
-Security first, worst first, one line each:
+1. **Fixed** — one line each: `path:line — what changed — lines saved | hole closed`. Then the
+   build and test result (pass, or the failing output).
+2. **Security, not fixed** — worst first:
+   `path:line — hole — who can trigger it — critical|high|medium|low — sure|unsure`, followed by its
+   drafted fix.
+3. **Cuts, not fixed** — biggest win first:
+   `path:line — what — simpler version — lines saved — sure|unsure`, followed by its drafted fix.
 
-`path:line — hole — who can trigger it — fix — critical|high|medium|low — sure|unsure`
-
-Then cuts, biggest win first:
-
-`path:line — what — simpler version — lines saved — sure|unsure`
-
-If there are no security findings, say so and list the surfaces you checked. End with the total
-lines that could go and the one or two findings worth doing first (any critical/high security
-hole comes first). Do not edit anything until the user picks findings; then apply them as the
-smallest diffs, run `./build.sh` and the tests, and report the results.
+Prove every hop of a security path with file:line as above. If there are no security findings, say
+so and list the surfaces you checked. End with the total lines removed and still removable, and the
+one or two drafted fixes worth doing next (any critical/high hole first). Do not commit; the user
+reviews the diff.
