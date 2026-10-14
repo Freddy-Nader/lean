@@ -122,7 +122,7 @@ final class Tab: NSObject, WKUIDelegate, WKNavigationDelegate {
         v.evaluateJavaScript(#"document.querySelector('link[rel~="icon"]')?.href ?? ""#) { [weak self] r, _ in
             MainActor.assumeIsolated {
                 let href = (r as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) } ?? URL(string: "/favicon.ico", relativeTo: page)
-                guard let href else { return }
+                guard let href, ["http", "https"].contains(href.scheme?.lowercased() ?? "") else { return }   // the page picks href
                 Task { @MainActor in
                     if let (d, _) = try? await URLSession.shared.data(from: href), let img = NSImage(data: d) {
                         Self.icons[host] = img
