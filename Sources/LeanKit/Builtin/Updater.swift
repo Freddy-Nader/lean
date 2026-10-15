@@ -17,7 +17,9 @@ struct UpdateManifest: Codable, Equatable {
 ///   - a changed binary replaces Contents/MacOS/lean, the app is re-signed ad hoc, and the new
 ///     build runs at the next launch ("Restart to Finish Update" does it now). The old binary is
 ///     kept at ~/.config/lean/updates/lean.prev.
-/// Everything is verified against the manifest's hashes before anything on disk changes.
+/// The manifest must carry a valid Ed25519 signature (manifest.sig, made by CI with the
+/// LEAN_UPDATE_KEY secret) from `publicKey`; everything is then verified against its hashes before
+/// anything on disk changes.
 /// Local builds (./build.sh without LEAN_COMMIT) never update themselves.
 @MainActor
 final class Updater: SwiftAddon {
@@ -26,6 +28,8 @@ final class Updater: SwiftAddon {
 
     static let defaultBase = "https://github.com/Freddy-Nader/lean/releases/download/latest"
     static let interval: Duration = .seconds(6 * 3600)
+    /// Verifies manifest.sig (scripts/update-key.swift). Empty: no key set yet, so nothing installs.
+    static let publicKey = ""
 
     /// The commit this app was built from; "dev" for local builds.
     static var bundleCommit: String { (Bundle.main.object(forInfoDictionaryKey: "LeanCommit") as? String) ?? "dev" }
@@ -61,7 +65,6 @@ final class Updater: SwiftAddon {
     struct State: Codable, Equatable {
         /// The `LeanCommit` of the app these files were layered over; a reinstall invalidates them.
         var base: String
-        var commit: String
         /// Manifest hash of the binary last installed, and the hash that binary has on disk after
         /// re-signing (signing changes the bytes, so the two differ). Trusted only while the file
         /// on disk still has that hash.
@@ -92,6 +95,12 @@ final class Updater: SwiftAddon {
         m.files.filter { local($0.key) != $0.value }.keys.sorted()
     }
 
+    /// True when `signature` is the Ed25519 signature of `data` by `key`.
+    static func verify(_ data: Data, signature: Data, key: String = publicKey) -> Bool {
+        guard let raw = Data(base64Encoded: key), let k = try? Curve25519.Signing.PublicKey(rawRepresentation: raw) else { return false }
+        return k.isValidSignature(signature, for: data)
+    }
+
     static func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
@@ -105,7 +114,7 @@ final class Updater: SwiftAddon {
     // MARK: check
 
     enum Failure: LocalizedError {
-        case http(String), hash(String), unsafe(String), notWritable, sign(String)
+        case http(String), hash(String), unsafe(String), notWritable, sign(String), signature
         var errorDescription: String? {
             switch self {
             case .http(let a): "could not download \(a)"
@@ -113,6 +122,7 @@ final class Updater: SwiftAddon {
             case .unsafe(let p): "manifest lists a path I will not write: \(p)"
             case .notWritable: "lean.app is in a read-only folder"
             case .sign(let o): "re-signing failed: \(o)"
+            case .signature: "the update manifest is not signed by lean's key"
             }
         }
     }
@@ -126,7 +136,9 @@ final class Updater: SwiftAddon {
             return
         }
         do {
-            let m = try JSONDecoder().decode(UpdateManifest.self, from: try await fetch("manifest.json"))
+            let raw = try await fetch("manifest.json")
+            guard Self.verify(raw, signature: try await fetch("manifest.sig")) else { throw Failure.signature }
+            let m = try JSONDecoder().decode(UpdateManifest.self, from: raw)
             if let bad = m.files.keys.first(where: { !Self.isSafe($0) }) { throw Failure.unsafe(bad) }
             guard let exe = Bundle.main.executableURL else { return }
             let onDisk = Self.sha256(try Data(contentsOf: exe))
@@ -144,7 +156,7 @@ final class Updater: SwiftAddon {
             let binary = newBinary ? try await fetch("lean", sha256: m.binary) : nil
 
             if let binary { try install(binary: binary, at: exe) }
-            try write(contents, State(base: Self.bundleCommit, commit: m.commit, binary: newBinary ? m.binary : have,
+            try write(contents, State(base: Self.bundleCommit, binary: newBinary ? m.binary : have,
                                       exe: newBinary ? Self.sha256(try Data(contentsOf: exe)) : onDisk))
             AddonHost.shared.rescan()
 
@@ -237,7 +249,7 @@ final class Updater: SwiftAddon {
         Commands.shared.register("update.restart", "Restart to Finish Update", owner: id) {
             let relaunch = Process()
             relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
-            relaunch.arguments = ["-c", "while kill -0 \(getpid()) 2>/dev/null; do sleep 0.1; done; exec open \"$0\"",
+            relaunch.arguments = ["-c", "while kill -0 \(getpid()) 2>/dev/null; do sleep 0.1; done; exec /usr/bin/open \"$0\"",
                                   Bundle.main.bundleURL.path]
             try? relaunch.run()
             NSApp.terminate(nil)

@@ -105,33 +105,29 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate {
         NSLayoutConstraint.deactivate(edgeConstraints)
         let top = bar.bottomAnchor
         var c: [NSLayoutConstraint] = []
+        // The page fills the window below the bar, except along the edge an add-on view takes.
+        var bottom = root.bottomAnchor, leading = root.leadingAnchor, trailing = root.trailingAnchor
         if let v = edgeView, edge != "hidden" {
             v.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(v, positioned: .above, relativeTo: content)
             switch edge {
             case "top":
                 c += [v.centerYAnchor.constraint(equalTo: root.topAnchor, constant: rowCentre), v.heightAnchor.constraint(equalToConstant: 28),
-                      v.leadingAnchor.constraint(equalTo: nav.view.trailingAnchor, constant: 8), v.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
-                      content.topAnchor.constraint(equalTo: top, constant: 6), content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-                      content.leadingAnchor.constraint(equalTo: root.leadingAnchor), content.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
+                      v.leadingAnchor.constraint(equalTo: nav.view.trailingAnchor, constant: 8), v.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8)]
             case "bottom":
                 c += [v.bottomAnchor.constraint(equalTo: root.bottomAnchor), v.heightAnchor.constraint(equalToConstant: 30),
-                      v.leadingAnchor.constraint(equalTo: root.leadingAnchor), v.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-                      content.topAnchor.constraint(equalTo: top, constant: 6), content.bottomAnchor.constraint(equalTo: v.topAnchor),
-                      content.leadingAnchor.constraint(equalTo: root.leadingAnchor), content.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
+                      v.leadingAnchor.constraint(equalTo: root.leadingAnchor), v.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
+                bottom = v.topAnchor
             default: // left / right sidebar
                 let left = edge == "left"
                 c += [v.topAnchor.constraint(equalTo: top, constant: 6), v.bottomAnchor.constraint(equalTo: root.bottomAnchor),
                       v.widthAnchor.constraint(equalToConstant: 220),
-                      left ? v.leadingAnchor.constraint(equalTo: root.leadingAnchor) : v.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-                      content.topAnchor.constraint(equalTo: top, constant: 6), content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-                      left ? content.leadingAnchor.constraint(equalTo: v.trailingAnchor) : content.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-                      left ? content.trailingAnchor.constraint(equalTo: root.trailingAnchor) : content.trailingAnchor.constraint(equalTo: v.leadingAnchor)]
+                      left ? v.leadingAnchor.constraint(equalTo: root.leadingAnchor) : v.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
+                if left { leading = v.trailingAnchor } else { trailing = v.leadingAnchor }
             }
-        } else {
-            c += [content.topAnchor.constraint(equalTo: top, constant: 6), content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-                  content.leadingAnchor.constraint(equalTo: root.leadingAnchor), content.trailingAnchor.constraint(equalTo: root.trailingAnchor)]
         }
+        c += [content.topAnchor.constraint(equalTo: top, constant: 6), content.bottomAnchor.constraint(equalTo: bottom),
+              content.leadingAnchor.constraint(equalTo: leading), content.trailingAnchor.constraint(equalTo: trailing)]
         edgeConstraints = c
         NSLayoutConstraint.activate(c)
     }
@@ -151,7 +147,11 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate {
     /// Inserts after the active tab, like Chrome.
     func add(_ t: Tab, select: Bool) {
         t.onChange = { [weak self] t in self?.refresh(t) }
-        t.onOpen = { [weak self] url, background in self?.open(url, background: background, opener: t) }
+        t.onOpen = { [weak self] url, background in
+            // Pages may not open file: or data: URLs; loading them natively would skip WebKit's block.
+            guard ["http", "https", "about"].contains(url.scheme?.lowercased() ?? "") else { return }
+            self?.open(url, background: background)
+        }
         let i = tabs.isEmpty ? 0 : activeIndex + 1
         let select = select || tabs.isEmpty
         tabs.insert(t, at: i)
@@ -161,10 +161,10 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate {
     }
 
     @discardableResult
-    func open(_ url: URL, background: Bool, opener: Tab? = nil) -> Tab {
+    func open(_ url: URL, background: Bool) -> Tab {
         let t = Tab(url: url)
         add(t, select: !background)
-        if background { t.materializeInBackground() }
+        if background { t.materialize() }   // starts loading without being shown
         return t
     }
 

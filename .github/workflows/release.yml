@@ -37,6 +37,10 @@ jobs:
           rm "$RUNNER_TEMP/lean.p12"
       - run: LEAN_COMMIT=${{ github.sha }} ./build.sh
       - run: python3 -I scripts/manifest.py build/lean.app dist
+      # lean refuses any manifest without a valid signature from Updater.publicKey.
+      - run: swift scripts/update-key.swift sign dist/manifest.json
+        env:
+          LEAN_UPDATE_KEY: ${{ secrets.LEAN_UPDATE_KEY }}
       - run: ditto -c -k --keepParent build/lean.app dist/lean.app.zip
       - name: Publish
         env:
@@ -46,5 +50,5 @@ jobs:
             --title latest --prerelease --target "$GITHUB_SHA" \
             --notes "Rolling build of master, read by lean's auto-updater. Install: see README."
           cd dist
-          gh release upload latest $(ls | grep -v '^manifest.json$') --clobber
-          gh release upload latest manifest.json --clobber
+          gh release upload latest $(ls | grep -Ev '^manifest\.(json|sig)$') --clobber
+          gh release upload latest manifest.sig manifest.json --clobber

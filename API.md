@@ -62,7 +62,7 @@ export default {
 | tab object | `id`, `url`, `title`, `eval(fn, ...args)` → Promise, `send(event, data)`, `reload()`, `navigate(url)`, `close()`, `focus()` |
 | `keys` | `bind(key, commandId)`, `unbind(key)` (runtime; keys.json still wins) |
 | `palette` | `addGroup(name, (query) => [{ title, subtitle, url, run }])`; rows with a `url` open like typed addresses (new tab after ⌘T, ⌘↵ the other way), and `run` still runs first |
-| `ui` | `toast(text)`, `copy(text)`, `open(pathOrUrl, { reveal })` |
+| `ui` | `toast(text)`, `copy(text)`, `open(pathOrUrl, { reveal })` (opens http(s) URLs and finished downloads; `reveal` shows any path in Finder) |
 | `storage` | `get(key)`, `set(key, value)`, `all()` (JSON values, per add-on) |
 | `settings` | `get(key)` (e.g. `downloads.folder`, `search.template`), `set(key, value)`, `declare(key, { title, options })` (options: strings or `{label, value}`). Declare a setting so it shows in Settings and the palette. |
 | `net` | `fetch(url, { method, headers, body })` → `{ status, ok, text(), json() }` |

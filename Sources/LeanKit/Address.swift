@@ -39,6 +39,6 @@ public enum Address {
     }
 
     private static func isLocal(_ s: String) -> Bool {
-        s.hasPrefix("localhost") || s.hasPrefix("127.0.0.1") || s.range(of: #"^\d+\.\d+\.\d+\.\d+"#, options: .regularExpression) != nil
+        s.hasPrefix("localhost") || s.range(of: #"^\d+\.\d+\.\d+\.\d+"#, options: .regularExpression) != nil
     }
 }

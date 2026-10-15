@@ -144,7 +144,7 @@ public final class JSAddon {
     func setPageData(_ json: String) {
         pageData = json
         rebuildPageScript()
-        AddonHost.shared.scriptsChanged()
+        AddonHost.shared.refreshScripts()
     }
 
     private func rebuildPageScript() {
@@ -226,11 +226,17 @@ public final class JSAddon {
         let setting: @convention(block) (String) -> Any = { k in main { Settings.shared.value(k) ?? NSNull() } }
         let settingDeclare: @convention(block) (String, String, String) -> Void = { key, title, opts in
             main {
+                guard Settings.shared.addon(owner, mayDeclare: key) else { return }
                 let o = (try? JSONSerialization.jsonObject(with: Data(opts.utf8))) as? [[String]] ?? []
                 Settings.shared.declare(key, title, options: o.map { ($0[0], $0[1]) }, owner: owner)
             }
         }
-        let settingSet: @convention(block) (String, JSValue) -> Void = { key, v in main { Settings.shared.set(key, v.toObject()) } }
+        let settingSet: @convention(block) (String, JSValue) -> Void = { key, v in
+            main {
+                let value = v.toObject()
+                if Settings.shared.addon(owner, maySet: key, value) { Settings.shared.set(key, value) }
+            }
+        }
         let rulesAdd: @convention(block) (String, String) -> Void = { rid, json in main { Rules.shared.add("\(owner).\(rid)", json: json) } }
         let rulesRemove: @convention(block) (String) -> Void = { rid in main { Rules.shared.remove("\(owner).\(rid)") } }
         let fetch: @convention(block) (String, String, JSValue) -> Void = { url, opts, cb in
@@ -256,7 +262,11 @@ public final class JSAddon {
                 let u = target.hasPrefix("/") || target.hasPrefix("~")
                     ? URL(fileURLWithPath: (target as NSString).expandingTildeInPath) : URL(string: target)
                 guard let u else { return }
-                if reveal { NSWorkspace.shared.activateFileViewerSelecting([u]) } else { NSWorkspace.shared.open(u) }
+                if reveal { NSWorkspace.shared.activateFileViewerSelecting([u]); return }
+                // Opening launches apps and scripts, so only web pages and files the user downloaded.
+                let downloaded = u.isFileURL && Downloads.shared.items.contains { $0.done && $0.file?.standardizedFileURL == u.standardizedFileURL }
+                guard ["http", "https"].contains(u.scheme?.lowercased() ?? "") || downloaded else { return }
+                NSWorkspace.shared.open(u)
             }
         }
         let rankMatch: @convention(block) (String, String) -> Any = { q, t in Rank.match(q, t) ?? NSNull() }

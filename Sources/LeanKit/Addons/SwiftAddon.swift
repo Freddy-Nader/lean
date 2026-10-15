@@ -29,7 +29,7 @@ public enum SwiftAddons {
             let on = AddonHost.shared.isEnabled(a.id, a.kind)
             if on, !loaded.contains(a.id) {
                 do { try a.load(); loaded.insert(a.id); errors[a.id] = nil }
-                catch { errors[a.id] = "\(error)"; a.unload() }
+                catch { errors[a.id] = "\(error)"; a.unload(); Commands.shared.unregisterAll(owner: a.id) }
             } else if !on, loaded.contains(a.id) {
                 a.unload()
                 loaded.remove(a.id)

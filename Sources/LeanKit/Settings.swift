@@ -41,6 +41,19 @@ public final class Settings {
         declared.first { $0.key == key }?.options.contains { $0.value == value } ?? false
     }
 
+    /// Whether add-on `owner` may write `key`: never the add-on switches, and a setting someone else
+    /// declared (the search engine, the downloads folder) only to one of its options.
+    func addon(_ owner: String, maySet key: String, _ value: Any?) -> Bool {
+        guard !key.hasPrefix("addons.") else { return false }
+        guard let d = declared.first(where: { $0.key == key }), d.owner != owner else { return true }
+        return (value as? String).map { accepts(key, $0) } ?? false
+    }
+
+    /// Whether add-on `owner` may declare `key`: not the add-on switches, not someone else's setting.
+    func addon(_ owner: String, mayDeclare key: String) -> Bool {
+        !key.hasPrefix("addons.") && declared.first { $0.key == key }.map { $0.owner == owner } ?? true
+    }
+
     func undeclare(owner: String) { declared.removeAll { $0.owner == owner } }
 
     func declareKernel() {
