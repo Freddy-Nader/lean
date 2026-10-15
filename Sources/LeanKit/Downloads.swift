@@ -58,6 +58,19 @@ public final class Downloads: NSObject, WKDownloadDelegate {
         onChange?()
     }
 
+    /// Saves bytes the page already has (the PDF viewer's download button) to the downloads folder.
+    @discardableResult
+    func save(_ data: Data, suggestedName: String, source: URL?) -> URL? {
+        let name = (suggestedName as NSString).lastPathComponent   // the page picks the name
+        let dest = Self.unique(Settings.shared.path("downloads.folder")
+            .appending(path: name.isEmpty || name.hasPrefix(".") ? "download.pdf" : name))
+        guard (try? data.write(to: dest, options: .withoutOverwriting)) != nil else { return nil }
+        items.append(Item(source: source, file: dest, done: true))
+        DistributedNotificationCenter.default().post(name: .init("com.apple.DownloadFileFinished"), object: dest.path)
+        onChange?()
+        return dest
+    }
+
     /// "file.pdf" → "file 2.pdf" when taken.
     static func unique(_ url: URL) -> URL {
         let fm = FileManager.default
