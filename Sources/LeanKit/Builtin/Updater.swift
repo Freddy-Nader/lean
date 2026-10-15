@@ -29,7 +29,7 @@ final class Updater: SwiftAddon {
     static let defaultBase = "https://github.com/Freddy-Nader/lean/releases/download/latest"
     static let interval: Duration = .seconds(6 * 3600)
     /// Verifies manifest.sig (scripts/update-key.swift). Empty: no key set yet, so nothing installs.
-    static let publicKey = ""
+    static let publicKey = "toDAzZRpvC5LxT+TKKKOdvkvOreB0n5zrRBhOzyEyR0="
 
     /// The commit this app was built from; "dev" for local builds.
     static var bundleCommit: String { (Bundle.main.object(forInfoDictionaryKey: "LeanCommit") as? String) ?? "dev" }
